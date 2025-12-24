@@ -6,7 +6,7 @@ This repository provides [GitHub Actions reusable workflows](./.github/workflows
 > [!IMPORTANT]
 > The workflows provided from this repository are currently intended primarily for my private use, so detailed documentation is not yet available. Please use them at your own risk.
 
-> [!NOTICE]
+> [!NOTE]
 > This repository has been separated from [smdn/Smdn.Fundamentals](https://github.com/smdn/Smdn.Fundamentals/). Versions prior to the separation are available from [Tags · smdn/Smdn.Fundamentals](https://github.com/smdn/Smdn.Fundamentals/tags).
 
 # For contributors
