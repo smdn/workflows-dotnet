@@ -392,7 +392,7 @@ jobs:
 
   publish-release:
     name: Publish release for '${{ needs.publish-release-target.outputs.release_tag }}'
-    uses: smdn/Smdn.Fundamentals/.github/workflows/publish-release.yml@workflows/release-target/v1.12.1
+    uses: smdn/workflows-dotnet/.github/workflows/publish-release.yml@0055fb235625f29cc21b5f37c4a014b4566ce6fc
     needs: publish-release-target
     with:
       workflow_runs_on:             ${{ inputs.workflow_runs_on }}
