@@ -1,0 +1,16 @@
+# EditorConfig is awesome: https://EditorConfig.org
+
+root = true
+
+[*]
+insert_final_newline = true
+indent_style = space
+trim_trailing_whitespace = true:suggestion
+
+[*.sh]
+end_of_line = lf
+indent_size = 2
+
+[*.yml]
+end_of_line = lf
+indent_size = 2
