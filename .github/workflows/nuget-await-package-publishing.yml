@@ -41,7 +41,7 @@ on:
 
 jobs:
   await-package-publishing:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
     timeout-minutes: ${{ fromJson(inputs.timeout_minutes) }}
     steps:
     - name: Determine the released package info
