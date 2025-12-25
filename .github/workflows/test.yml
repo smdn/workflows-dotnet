@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 # SPDX-FileCopyrightText: "2022 smdn <smdn@smdn.jp>"
-#cSpell:ignore apikey,pwsh,VSTest
+#cSpell:ignore VSTest
 
 name: Run tests (reusable workflow)
 

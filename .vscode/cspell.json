@@ -13,8 +13,15 @@
   "words": [
     "smdn",
   ],
-  "ignoreWords": [],
-  "ignoreRegExpList": [],
+  "ignoreWords": [
+    "apilist",
+    "msbuild",
+    "nologo",
+    "pwsh",
+  ],
+  "ignoreRegExpList": [
+    "NETSDK[0-9]+"
+  ],
   // flagWords - list of words to be always considered incorrect
   // This is useful for offensive words and common spelling errors.
   // For example "hte" should be "the"

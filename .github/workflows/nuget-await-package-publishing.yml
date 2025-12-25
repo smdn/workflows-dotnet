@@ -1,6 +1,5 @@
 # SPDX-License-Identifier: MIT
 # SPDX-FileCopyrightText: "2025 smdn <smdn@smdn.jp>"
-# cSpell:ignore pwsh
 
 name: Wait for NuGet package publishing (reusable workflow)
 run-name: Wait for NuGet package publishing for ${{ inputs.release_tag }}
