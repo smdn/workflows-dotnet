@@ -33,24 +33,6 @@ on:
         type: string
         default: "tests/"
 
-      path_prefix_source:
-        description: "The common prefix of the path to source directory based on the repository root."
-        required: false
-        type: string
-        default: "src/"
-
-      path_proj_install_project_assets:
-        description: "The path to the .NET project file that will install the project assets and/or the dependencies required for the build."
-        required: false
-        type: string
-        default: "eng/InstallProjectAssets.proj"
-
-      use_project_assets_sdk:
-        description: "If true, enables processing that uses project assets importing as MSBuild Project SDK."
-        required: false
-        type: boolean
-        default: true
-
       path_global_json:
         description: "The path to the 'global.json' file that configures the test environment."
         required: false
@@ -179,7 +161,6 @@ jobs:
       run: |
         $verbose = '${{ inputs.verbose }}' -ieq 'true'
         $directory_tests = [System.IO.Path]::Join('${{ github.workspace }}', '${{ inputs.path_prefix_tests }}')
-        $directory_src   = [System.IO.Path]::Join('${{ github.workspace }}', '${{ inputs.path_prefix_source }}')
 
         # find all project from directories which contains the file named '*.Tests.csproj'
         $projects = Get-ChildItem -Path "${directory_tests}/*/*.Tests.csproj" -File | `
@@ -197,22 +178,12 @@ jobs:
           $projects = $projects | where Name -eq '${{ inputs.project }}'
         }
 
-        '### Test target project'   >> $Env:GITHUB_STEP_SUMMARY
-        ''                          >> $Env:GITHUB_STEP_SUMMARY
-        '|Name|Project path|'       >> $Env:GITHUB_STEP_SUMMARY
-        '|----|------------|'       >> $Env:GITHUB_STEP_SUMMARY
+        '### Test project'    >> $Env:GITHUB_STEP_SUMMARY
+        ''                    >> $Env:GITHUB_STEP_SUMMARY
+        '|Name|Project path|' >> $Env:GITHUB_STEP_SUMMARY
+        '|----|------------|' >> $Env:GITHUB_STEP_SUMMARY
 
         foreach ($proj in $projects) {
-          # find test target project
-          $test_target_proj = Get-ChildItem -Path "${directory_src}/$($proj.'Name')/$($proj.'Name').csproj" -File | select -First 1
-
-          if ( $test_target_proj ) {
-            $proj | Add-Member `
-              -MemberType NoteProperty `
-              -Name 'PathToTestTargetProject' `
-              -Value "$([System.IO.Path]::GetRelativePath('${{ github.workspace }}', $test_target_proj.FullName))"
-          }
-
           "|``$($proj.'Name')``|``$($proj.'PathToTestProject')``|" >> $Env:GITHUB_STEP_SUMMARY
 
           if ( $verbose ) {
@@ -342,31 +313,6 @@ jobs:
     - name: Restore dependencies of ${{ matrix.project.Name }}
       shell: pwsh
       run: |
-        $use_project_assets_sdk = '${{ inputs.use_project_assets_sdk }}' -ieq 'true'
-
-        if ( !$use_project_assets_sdk ) {
-          $path_to_proj_install_assets = [System.IO.Path]::Join(
-            '${{ github.workspace }}',
-            '${{ inputs.path_proj_install_project_assets }}'
-          )
-
-          # install project assets and/or dependencies first
-          if (Test-Path -Path $path_to_proj_install_assets -PathType Leaf) {
-            dotnet restore `
-              --nologo `
-              ${{ inputs.extra_options_common }} `
-              $path_to_proj_install_assets
-          }
-          else {
-            # note: restore the test target project first due to dependencies such as build assets (Smdn.MSBuild.ProjectAssets.*) have to be installed and restored
-            dotnet restore `
-              --nologo `
-              --no-dependencies `
-              ${{ inputs.extra_options_common }} `
-              ${{ matrix.project.PathToTestTargetProject }}
-          }
-        }
-
         # build the options for `dotnet restore`
         $dotnet_restore_options = @(
           '--nologo'
