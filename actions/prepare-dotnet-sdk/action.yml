@@ -1,0 +1,51 @@
+# SPDX-License-Identifier: MIT
+# SPDX-FileCopyrightText: "2025 smdn <smdn@smdn.jp>"
+name: Prepare .NET SDK
+
+description: >
+  A composite action that prepares minimum required version of .NET SDK.
+  Before installation, it checks whether the minimum required version is already installed or not.
+  The installation is performed only when the specified version is not installed.
+
+inputs:
+  minimal_dotnet_sdk_version:
+    description: "The minimum required version of the .NET SDK which must be installed."
+    required: true
+    default: "10.0.100"
+
+outputs:
+  installed_dotnet_sdk_version:
+    description: "The .NET SDK version that has either been newly installed or has already been deployed."
+    value: ${{ steps.install-dotnet-sdk.outputs.dotnet-version || inputs.minimal_dotnet_sdk_version }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Check .NET SDK ${{ inputs.minimal_dotnet_sdk_version }} is installed
+      id: check-dotnet-sdk-version
+      shell: pwsh
+      run: |
+        $required_version = [System.Version]::Parse('${{ inputs.minimal_dotnet_sdk_version }}')
+
+        if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) {
+          # required SDK version is not installed
+          "::notice::.NET SDK version: not installed, required ${required_version}"
+
+          "required-version=${required_version}" >> $Env:GITHUB_OUTPUT
+        }
+
+        $installed_version = [System.Version]::Parse($(dotnet --version))
+
+        if ( $required_version -gt $installed_version ) {
+          # required SDK version is not installed
+          "::notice::.NET SDK version: installed ${installed_version}, required ${required_version}"
+
+          "required-version=${required_version}" >> $Env:GITHUB_OUTPUT
+        }
+
+    - name: Install .NET SDK ${{ steps.check-dotnet-sdk-version.outputs.required-version }}
+      id: install-dotnet-sdk
+      if: ${{ steps.check-dotnet-sdk-version.outputs.required-version != '' }}
+      uses: actions/setup-dotnet@v5.0.1
+      with:
+        dotnet-version: "${{ steps.check-dotnet-sdk-version.outputs.required-version }}"
