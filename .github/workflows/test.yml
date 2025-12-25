@@ -51,6 +51,12 @@ on:
         type: boolean
         default: true
 
+      path_global_json:
+        description: "The path to the 'global.json' file that configures the test environment."
+        required: false
+        type: string
+        default: 'global.json'
+
       timeout_minutes_test_job:
         description: "The timeout minutes for each test jobs."
         required: false
@@ -223,16 +229,10 @@ jobs:
       id: test-configurations
       shell: pwsh
       run: |
-        # find the path to 'global.json' from the output of `dotnet --info`
-        if ((& dotnet --info | Out-String) -match '(?m)^\s*global\.json file:\s*\n\s*(?<path>.+global\.json)$') {
-          $path_to_global_json = $Matches['path'].Trim()
+        $path_to_global_json = $null
 
-          if ($path_to_global_json -ieq 'Not found') {
-            $path_to_global_json = $null
-          }
-        }
-        else {
-          $path_to_global_json = $null
+        if (![string]::IsNullOrEmpty('${{ inputs.path_global_json }}')) {
+          $path_to_global_json = [System.IO.Path]::Join('${{ github.workspace }}', '${{ inputs.path_global_json }}')
         }
 
         # get the test runner name specified in 'global.json'
