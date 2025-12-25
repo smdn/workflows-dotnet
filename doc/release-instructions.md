@@ -4,12 +4,19 @@
 - GitHub CLIが必要
 
 ## 手順
+まず、タグ付けの対象となるコミットがリモートに存在する状態にしておく。
+
+```
+git push
+```
+
 以下のコマンドにて、新たにReleaseとして作成するタグ名を指定して、draftを作成する。
 
 ```
 gh release create --generate-notes --draft test/vX.Y.Z
 gh release create --generate-notes --draft nuget/vX.Y.Z
 gh release create --generate-notes --draft release-target/vX.Y.Z
+gh release create --generate-notes --draft actions/prepare-dotnet-sdk/vX.Y.Z
 ```
 
 以下のようにdraftを編集するためのURLが提示されるので、開く。
