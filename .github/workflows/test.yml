@@ -133,7 +133,7 @@ env:
 jobs:
   setup:
     name: Set up
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
     timeout-minutes: 3
     outputs:
       runs-ons: ${{ steps.runs-on-os-list.outputs.runs-ons }}
