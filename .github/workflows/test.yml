@@ -435,6 +435,8 @@ jobs:
         TIMEOUT_HANG:               ${{ inputs.timeout_hang }}
         TIMEOUT_VSTEST_CONNECTION:  ${{ inputs.timeout_vstest_connection }}
       run: |
+        $use_mtp_test_runner = '${{ needs.setup.outputs.test-runner }}' -ieq 'Microsoft.Testing.Platform'
+
         $timeout_hang = $Env:TIMEOUT_HANG | `
           ConvertFrom-Json | `
           where { ($_.OS -ieq '${{ runner.os }}') -or [string]::IsNullOrEmpty($_.OS) } | `
@@ -450,7 +452,7 @@ jobs:
         $timeout_vstest_connection ??= 90
 
         # set output
-        if ('${{ needs.setup.outputs.test-runner }}' -ieq 'Microsoft.Testing.Platform') {
+        if ($use_mtp_test_runner) {
           # output for the case of Microsoft.Testing.Platform
           $timeout = $timeout_hang
           $timeout = $timeout.Replace('seconds','s').Replace('second','s').Replace('secs','s').Replace('sec','s')
@@ -471,6 +473,7 @@ jobs:
         VSTEST_CONNECTION_TIMEOUT: ${{ steps.test-timeouts.outputs.timeout_vstest_connection }}
       run: |
         $option_verbosity_level = '${{ inputs.dotnet_test_options_verbosity_level }}'
+        $use_mtp_test_runner = '${{ needs.setup.outputs.test-runner }}' -ieq 'Microsoft.Testing.Platform'
 
         if ([string]::IsNullOrEmpty($option_verbosity_level)) {
           $option_verbosity_level = 'quiet' # default verbosity level
@@ -489,7 +492,7 @@ jobs:
           '--verbosity', $option_verbosity_level
         )
 
-        if ('${{ needs.setup.outputs.test-runner }}' -ieq 'Microsoft.Testing.Platform') {
+        if ($use_mtp_test_runner) {
           # options for Microsoft.Testing.Platform test runner
           $dotnet_test_options += @(
             '--no-ansi',
@@ -523,7 +526,7 @@ jobs:
           $dotnet_test_options += @( '${{ inputs.extra_options_common }}' )
         }
 
-        if ('${{ needs.setup.outputs.test-runner }}' -ine 'Microsoft.Testing.Platform') {
+        if (!$use_mtp_test_runner) {
           $dotnet_test_options += @( '${{ matrix.project.PathToTestProject }}' )
         }
 
