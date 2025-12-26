@@ -286,27 +286,15 @@ jobs:
     - name: Build ${{ steps.package-info.outputs.package_id }}
       shell: pwsh
       run: |
-        $use_project_assets_sdk = '${{ inputs.use_project_assets_sdk }}' -ieq 'true'
-
         # build the options for `dotnet build`
+        # note:
+        #   do not specify '--no-restore' option here since the dependencies in
+        #   MSBuild project SDK (Smdn.Reflection.ReverseGenerating.ListApi.MSBuild.Tasks, etc.)
+        #   have to be restored before 'dotnet build' and 'dotnet pack'
         $dotnet_build_options = @(
+          # '--no-restore'
           '--configuration', 'Release',
-          '--nologo'
-        )
-
-        if ( $use_project_assets_sdk ) {
-          # note: do not specify --no-restore option here since the dependencies
-          # in MSBuild project SDK (Smdn.Reflection.ReverseGenerating.ListApi.MSBuild.Tasks, etc.)
-          # have to be restored
-          #$dotnet_build_options += @( '--no-restore' )
-        }
-        else {
-          # note: do not specify --no-restore option here since the dependencies
-          # in build assets (Smdn.MSBuild.ProjectAssets.*) have to be restored
-          #$dotnet_build_options += @( '--no-restore' )
-        }
-
-        $dotnet_build_options += @(
+          '--nologo',
           '-consoleLoggerParameters:NoSummary',
           '/p:RepositoryBranch=${{ steps.package-info.outputs.package_branch }}',
           '${{ steps.package-info.outputs.package_source_dir }}'
