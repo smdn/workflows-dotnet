@@ -16,6 +16,7 @@ git push
 gh release create --generate-notes --draft test/vX.Y.Z
 gh release create --generate-notes --draft nuget/vX.Y.Z
 gh release create --generate-notes --draft release-target/vX.Y.Z
+gh release create --generate-notes --draft release-note/vX.Y.Z
 gh release create --generate-notes --draft actions/prepare-dotnet-sdk/vX.Y.Z
 ```
 
