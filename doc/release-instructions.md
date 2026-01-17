@@ -13,11 +13,11 @@ git push
 以下のコマンドにて、新たにReleaseとして作成するタグ名を指定して、draftを作成する。
 
 ```
-gh release create --generate-notes --draft test/vX.Y.Z
-gh release create --generate-notes --draft nuget/vX.Y.Z
-gh release create --generate-notes --draft release-target/vX.Y.Z
-gh release create --generate-notes --draft release-note/vX.Y.Z
-gh release create --generate-notes --draft actions/prepare-dotnet-sdk/vX.Y.Z
+gh release create --generate-notes --draft --notes-start-tag test/v<prev> test/vX.Y.Z
+gh release create --generate-notes --draft --notes-start-tag nuget/v<prev> nuget/vX.Y.Z
+gh release create --generate-notes --draft --notes-start-tag release-target/v<prev> release-target/vX.Y.Z
+gh release create --generate-notes --draft --notes-start-tag release-note/v<prev> release-note/vX.Y.Z
+gh release create --generate-notes --draft --notes-start-tag actions/prepare-dotnet-sdk/v<prev> actions/prepare-dotnet-sdk/vX.Y.Z
 ```
 
 以下のようにdraftを編集するためのURLが提示されるので、開く。
