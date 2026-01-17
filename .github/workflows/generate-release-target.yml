@@ -494,6 +494,7 @@ jobs:
             Target = "releasenote"
             FileName = 'releasenote.section2.api-changes.diff'
             Content = git diff `
+              --no-renames `
               --unified=10000 `
               ${{ github.sha }}..${{ steps.release-info.outputs.working_branch }} `
               -- `
