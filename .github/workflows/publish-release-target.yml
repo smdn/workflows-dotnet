@@ -82,6 +82,12 @@ jobs:
       with:
         minimal_dotnet_sdk_version: '${{ inputs.dotnet_sdk_version }}'
 
+    - name: Configure git
+      run: |
+        git config --global core.autocrlf input
+        git config --global core.safecrlf true
+        git config --global core.ignorecase false
+
     - name: Checkout repository
       # note: checkout repository firstly due to working directory will be cleaned up on checkout
       uses: actions/checkout@v6.0.0
