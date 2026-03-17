@@ -134,12 +134,15 @@ jobs:
     - name: Determine OS list which run the tests on
       id: runs-on-os-list
       shell: pwsh
+      env:
+        INPUT_VERBOSE: ${{ inputs.verbose == true }}
+        INPUT_OS: ${{ inputs.os }}
       run: |
-        $verbose = '${{ inputs.verbose }}' -ieq 'true'
+        $verbose = $env:INPUT_VERBOSE -ieq 'true'
         $os_list = $Env:RUNS_ON_OS_LIST_DEFAULT | ConvertFrom-Json
 
-        if ( ! [string]::IsNullOrEmpty( '${{ inputs.os }}' ) ) {
-          $os_list = "${{ inputs.os }}".Split(",", [System.StringSplitOptions]::TrimEntries -bor [System.StringSplitOptions]::RemoveEmptyEntries)
+        if ( ! [string]::IsNullOrEmpty( $env:INPUT_OS ) ) {
+          $os_list = $env:INPUT_OS.Split(",", [System.StringSplitOptions]::TrimEntries -bor [System.StringSplitOptions]::RemoveEmptyEntries)
         }
 
         '### Test runs on' >> $Env:GITHUB_STEP_SUMMARY
@@ -158,9 +161,13 @@ jobs:
     - name: Determine test projects
       id: test-projects
       shell: pwsh
+      env:
+        INPUT_VERBOSE: ${{ inputs.verbose == true }}
+        INPUT_PATH_PREFIX_TESTS: ${{ inputs.path_prefix_tests }}
+        INPUT_PROJECT: ${{ inputs.project }}
       run: |
-        $verbose = '${{ inputs.verbose }}' -ieq 'true'
-        $directory_tests = [System.IO.Path]::Join('${{ github.workspace }}', '${{ inputs.path_prefix_tests }}')
+        $verbose = $env:INPUT_VERBOSE -ieq 'true'
+        $directory_tests = [System.IO.Path]::Join($env:GITHUB_WORKSPACE, $env:INPUT_PATH_PREFIX_TESTS)
 
         # find all project from directories which contains the file named '*.Tests.csproj'
         $projects = Get-ChildItem -Path "${directory_tests}/*/*.Tests.csproj" -File | `
@@ -171,11 +178,11 @@ jobs:
             },
             @{
               Name = 'PathToTestProject'
-              Expression = {[System.IO.Path]::GetRelativePath('${{ github.workspace }}', $_.FullName)}
+              Expression = {[System.IO.Path]::GetRelativePath($env:GITHUB_WORKSPACE, $_.FullName)}
             }
 
-        if ( ! [string]::IsNullOrEmpty( '${{ inputs.project }}' ) ) {
-          $projects = $projects | where Name -eq '${{ inputs.project }}'
+        if ( ! [string]::IsNullOrEmpty( $env:INPUT_PROJECT ) ) {
+          $projects = $projects | where Name -eq $env:INPUT_PROJECT
         }
 
         '### Test project'    >> $Env:GITHUB_STEP_SUMMARY
@@ -199,11 +206,13 @@ jobs:
     - name: Determine test configurations
       id: test-configurations
       shell: pwsh
+      env:
+        INPUT_PATH_GLOBAL_JSON: ${{ inputs.path_global_json }}
       run: |
         $path_to_global_json = $null
 
-        if (![string]::IsNullOrEmpty('${{ inputs.path_global_json }}')) {
-          $path_to_global_json = [System.IO.Path]::Join('${{ github.workspace }}', '${{ inputs.path_global_json }}')
+        if (![string]::IsNullOrEmpty($env:INPUT_PATH_GLOBAL_JSON)) {
+          $path_to_global_json = [System.IO.Path]::Join($env:GITHUB_WORKSPACE, $env:INPUT_PATH_GLOBAL_JSON)
         }
 
         # get the test runner name specified in 'global.json'
@@ -284,10 +293,12 @@ jobs:
     - name: Set NUGET_PACKAGES
       id: set-nuget-packages
       shell: pwsh
+      env:
+        INPUT_VERBOSE: ${{ inputs.verbose == true }}
       run: |
-        $verbose = '${{ inputs.verbose }}' -ieq 'true'
+        $verbose = $env:INPUT_VERBOSE -ieq 'true'
         $path_to_nuget_packages =[System.IO.Path]::Combine(
-          '${{ github.workspace }}',
+          $env:GITHUB_WORKSPACE,
           '.nuget',
           'packages'
         )
@@ -318,23 +329,31 @@ jobs:
 
     - name: Restore dependencies of ${{ matrix.project.Name }}
       shell: pwsh
+      env:
+        INPUT_EXTRA_OPTIONS_COMMON: ${{ inputs.extra_options_common }}
+        INPUT_PATH_TO_TEST_PROJECT: ${{ matrix.project.PathToTestProject }}
       run: |
         # build the options for `dotnet restore`
         $dotnet_restore_options = @(
           '--nologo'
         )
 
-        if ( ! [string]::IsNullOrEmpty( '${{ inputs.extra_options_common }}' ) ) {
-          $dotnet_restore_options += @( '${{ inputs.extra_options_common }}' )
+        if ( ! [string]::IsNullOrEmpty( $env:INPUT_EXTRA_OPTIONS_COMMON ) ) {
+          $dotnet_restore_options += @( $env:INPUT_EXTRA_OPTIONS_COMMON )
         }
 
-        $dotnet_restore_options += @( '${{ matrix.project.PathToTestProject }}' )
+        $dotnet_restore_options += @( $env:INPUT_PATH_TO_TEST_PROJECT )
 
         "dotnet restore ${dotnet_restore_options}"
         dotnet restore @dotnet_restore_options
 
     - name: Build test project ${{ matrix.project.Name }}
       shell: pwsh
+      env:
+        INPUT_DOTNET_BUILD_OPTIONS_ENABLE_CONCURRENT_BUILD: ${{ inputs.dotnet_build_options_enable_concurrent_build == true }}
+        INPUT_DOTNET_TEST_OPTIONS_FRAMEWORK: ${{ inputs.dotnet_test_options_framework }}
+        INPUT_EXTRA_OPTIONS_COMMON: ${{ inputs.extra_options_common }}
+        INPUT_PATH_TO_TEST_PROJECT: ${{ matrix.project.PathToTestProject }}
       run: |
         # build the options for `dotnet build`
         $dotnet_build_options = @(
@@ -343,24 +362,24 @@ jobs:
           '-consoleLoggerParameters:NoSummary'
         )
 
-        if ( '${{ inputs.dotnet_build_options_enable_concurrent_build }}' -ine 'true' ) {
+        if ( $env:INPUT_DOTNET_BUILD_OPTIONS_ENABLE_CONCURRENT_BUILD -ine 'true' ) {
           # set '-maxCpuCount:1' to disable concurrent build
           # used as the workaround for 'error MSB4018: The "GenerateDepsFile" task failed unexpectedly'
           # ref: https://github.com/dotnet/sdk/issues/2902
           $dotnet_build_options += @('-maxCpuCount:1')
         }
 
-        if ( ! [string]::IsNullOrEmpty( '${{ inputs.dotnet_test_options_framework }}' ) ) {
+        if ( ! [string]::IsNullOrEmpty( $env:INPUT_DOTNET_TEST_OPTIONS_FRAMEWORK ) ) {
           $dotnet_build_options += @(
-            '--framework', '${{ inputs.dotnet_test_options_framework }}'
+            '--framework', $env:INPUT_DOTNET_TEST_OPTIONS_FRAMEWORK
           )
         }
 
-        if ( ! [string]::IsNullOrEmpty( '${{ inputs.extra_options_common }}' ) ) {
-          $dotnet_build_options += @( '${{ inputs.extra_options_common }}' )
+        if ( ! [string]::IsNullOrEmpty( $env:INPUT_EXTRA_OPTIONS_COMMON ) ) {
+          $dotnet_build_options += @( $env:INPUT_EXTRA_OPTIONS_COMMON )
         }
 
-        $dotnet_build_options += @( '${{ matrix.project.PathToTestProject }}' )
+        $dotnet_build_options += @( $env:INPUT_PATH_TO_TEST_PROJECT )
 
         "dotnet build ${dotnet_build_options}"
         dotnet build @dotnet_build_options
@@ -369,19 +388,20 @@ jobs:
       id: test-timeouts
       shell: pwsh
       env:
-        TIMEOUT_HANG:               ${{ inputs.timeout_hang }}
-        TIMEOUT_VSTEST_CONNECTION:  ${{ inputs.timeout_vstest_connection }}
+        INPUT_TIMEOUT_HANG: ${{ inputs.timeout_hang }}
+        INPUT_TIMEOUT_VSTEST_CONNECTION: ${{ inputs.timeout_vstest_connection }}
+        INPUT_TEST_RUNNER: ${{ needs.setup.outputs.test-runner }}
       run: |
-        $use_mtp_test_runner = '${{ needs.setup.outputs.test-runner }}' -ieq 'Microsoft.Testing.Platform'
+        $use_mtp_test_runner = $env:INPUT_TEST_RUNNER -ieq 'Microsoft.Testing.Platform'
 
-        $timeout_hang = $Env:TIMEOUT_HANG | `
+        $timeout_hang = $env:INPUT_TIMEOUT_HANG | `
           ConvertFrom-Json | `
-          where { ($_.OS -ieq '${{ runner.os }}') -or [string]::IsNullOrEmpty($_.OS) } | `
+          where { ($_.OS -ieq $env:RUNNER_OS) -or [string]::IsNullOrEmpty($_.OS) } | `
           select -ExpandProperty Timeout -First 1
 
-        $timeout_vstest_connection = $Env:TIMEOUT_VSTEST_CONNECTION | `
+        $timeout_vstest_connection = $env:INPUT_TIMEOUT_VSTEST_CONNECTION | `
           ConvertFrom-Json | `
-          where { ($_.OS -ieq '${{ runner.os }}') -or [string]::IsNullOrEmpty($_.OS) } | `
+          where { ($_.OS -ieq $env:RUNNER_OS) -or [string]::IsNullOrEmpty($_.OS) } | `
           select -ExpandProperty Timeout -First 1
 
         # set fallback value
@@ -408,15 +428,24 @@ jobs:
       shell: pwsh
       env:
         VSTEST_CONNECTION_TIMEOUT: ${{ steps.test-timeouts.outputs.timeout_vstest_connection }}
+        INPUT_DOTNET_TEST_OPTIONS_FRAMEWORK: ${{ inputs.dotnet_test_options_framework }}
+        INPUT_DOTNET_TEST_OPTIONS_FILTER_EXPRESSION: ${{ inputs.dotnet_test_options_filter_expression }}
+        INPUT_DOTNET_TEST_OPTIONS_OUTPUT_VERBOSITY_LEVEL: ${{ inputs.dotnet_test_options_output_verbosity_level }}
+        INPUT_DOTNET_TEST_OPTIONS_VERBOSITY_LEVEL: ${{ inputs.dotnet_test_options_verbosity_level }}
+        INPUT_EXTRA_OPTIONS_COMMON: ${{ inputs.extra_options_common }}
+        INPUT_PATH_TO_TEST_PROJECT: ${{ matrix.project.PathToTestProject }}
+        INPUT_TEST_RUNNER: ${{ needs.setup.outputs.test-runner }}
+        INPUT_TIMEOUT: ${{ steps.test-timeouts.outputs.timeout }}
+        INPUT_TIMEOUT_HANG: ${{ steps.test-timeouts.outputs.timeout_hang }}
       run: |
-        $option_verbosity_level = '${{ inputs.dotnet_test_options_verbosity_level }}'
-        $use_mtp_test_runner = '${{ needs.setup.outputs.test-runner }}' -ieq 'Microsoft.Testing.Platform'
+        $option_verbosity_level = $env:INPUT_DOTNET_TEST_OPTIONS_VERBOSITY_LEVEL
+        $use_mtp_test_runner = $env:INPUT_TEST_RUNNER -ieq 'Microsoft.Testing.Platform'
 
         if ([string]::IsNullOrEmpty($option_verbosity_level)) {
           $option_verbosity_level = 'quiet' # default verbosity level
         }
 
-        $option_output_verbosity_level = '${{ inputs.dotnet_test_options_output_verbosity_level }}'
+        $option_output_verbosity_level = $env:INPUT_DOTNET_TEST_OPTIONS_OUTPUT_VERBOSITY_LEVEL
 
         if ([string]::IsNullOrEmpty($option_output_verbosity_level)) {
           $option_output_verbosity_level = 'Normal' # default output verbosity level
@@ -434,37 +463,37 @@ jobs:
           $dotnet_test_options += @(
             '--no-ansi',
             '--no-progress',
-            '--timeout', '${{ steps.test-timeouts.outputs.timeout }}',
+            '--timeout', $env:INPUT_TIMEOUT,
             '--output', $option_output_verbosity_level,
-            '--project', '${{ matrix.project.PathToTestProject }}'
+            '--project', $env:INPUT_PATH_TO_TEST_PROJECT
           )
         }
         else {
           # If the runner is not MTP, assume that the VSTest will be used
           $dotnet_test_options += @(
             '--nologo',
-            '--blame-hang-timeout', '${{ steps.test-timeouts.outputs.timeout_hang }}'
+            '--blame-hang-timeout', $env:INPUT_TIMEOUT_HANG
           )
         }
 
-        if ( ! [string]::IsNullOrEmpty( '${{ inputs.dotnet_test_options_framework }}' ) ) {
+        if ( ! [string]::IsNullOrEmpty( $env:INPUT_DOTNET_TEST_OPTIONS_FRAMEWORK ) ) {
           $dotnet_test_options += @(
-            '--framework', '${{ inputs.dotnet_test_options_framework }}'
+            '--framework', $env:INPUT_DOTNET_TEST_OPTIONS_FRAMEWORK
           )
         }
 
-        if ( ! [string]::IsNullOrEmpty( '${{ inputs.dotnet_test_options_filter_expression }}' ) ) {
+        if ( ! [string]::IsNullOrEmpty( $env:INPUT_DOTNET_TEST_OPTIONS_FILTER_EXPRESSION ) ) {
           $dotnet_test_options += @(
-            '--filter', '${{ inputs.dotnet_test_options_filter_expression }}'
+            '--filter', $env:INPUT_DOTNET_TEST_OPTIONS_FILTER_EXPRESSION
           )
         }
 
-        if ( ! [string]::IsNullOrEmpty( '${{ inputs.extra_options_common }}' ) ) {
-          $dotnet_test_options += @( '${{ inputs.extra_options_common }}' )
+        if ( ! [string]::IsNullOrEmpty( $env:INPUT_EXTRA_OPTIONS_COMMON ) ) {
+          $dotnet_test_options += @( $env:INPUT_EXTRA_OPTIONS_COMMON )
         }
 
         if (!$use_mtp_test_runner) {
-          $dotnet_test_options += @( '${{ matrix.project.PathToTestProject }}' )
+          $dotnet_test_options += @( $env:INPUT_PATH_TO_TEST_PROJECT )
         }
 
         "dotnet test ${dotnet_test_options}"

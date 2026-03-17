@@ -24,8 +24,10 @@ runs:
     - name: Check .NET SDK ${{ inputs.minimal_dotnet_sdk_version }} is installed
       id: check-dotnet-sdk-version
       shell: pwsh
+      env:
+        INPUT_MINIMAL_DOTNET_SDK_VERSION: ${{ inputs.minimal_dotnet_sdk_version }}
       run: |
-        $required_version = [System.Version]::Parse('${{ inputs.minimal_dotnet_sdk_version }}')
+        $required_version = [System.Version]::Parse($env:INPUT_MINIMAL_DOTNET_SDK_VERSION)
 
         if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) {
           # required SDK version is not installed
