@@ -46,18 +46,21 @@ jobs:
     - name: Determine the released package info
       id: released-package-info
       shell: pwsh
+      env:
+        INPUT_RELEASE_TAG: ${{ inputs.release_tag }}
+        INPUT_RELEASE_TAG_PREFIX: ${{ inputs.release_tag_prefix }}
       run: |
-        $release_tag = '${{ inputs.release_tag }}'
+        $release_tag = $env:INPUT_RELEASE_TAG
 
         #
         # determine package ID and version
         #
         $pattern_release_tag = '^{0}{1}\-{2}$' -f
-          '${{ inputs.release_tag_prefix }}',
+          $env:INPUT_RELEASE_TAG_PREFIX,
           '(?<id>[A-Za-z0-9\.]+)',
           '(?<version>[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?([\-\+][0-9a-zA-Z\.]+)?)'
 
-        if ("$release_tag" -match "$pattern_release_tag") {
+        if ($release_tag -match $pattern_release_tag) {
           # split package info and version from tag name
           $package_id = $Matches['id']
           $package_version = $Matches['version']
@@ -77,6 +80,11 @@ jobs:
 
     - name: Wait until the package is published
       shell: pwsh
+      env:
+        INPUT_PACKAGE_SOURCE: ${{ inputs.package_source }}
+        INPUT_PACKAGE_ID: ${{ steps.released-package-info.outputs.package_id }}
+        INPUT_PACKAGE_VERSION: ${{ steps.released-package-info.outputs.package_version }}
+        INPUT_UPDATE_INTERVAL_SECONDS: ${{ inputs.update_interval_seconds }}
       run: |
         # cSpell:disable-next-line
         # ref: smdn/Smdn.Fundamentals/src/Smdn.MSBuild.ProjectAssets.Common/project/scripts/psmodules/NuGet.ServiceIndex/NuGet.ServiceIndex.psm1
@@ -125,9 +133,9 @@ jobs:
             -ErrorAction Stop
         }
 
-        $package_source = '${{ inputs.package_source }}'
-        $package_id = '${{ steps.released-package-info.outputs.package_id }}'
-        $package_version = '${{ steps.released-package-info.outputs.package_version }}'
+        $package_source = $env:INPUT_PACKAGE_SOURCE
+        $package_id = $env:INPUT_PACKAGE_ID
+        $package_version = $env:INPUT_PACKAGE_VERSION
 
         while ($true) {
           try {
@@ -148,5 +156,5 @@ jobs:
             "::error::🚨 Unexpected error: $($_.Exception)"
           }
 
-          Start-Sleep -Seconds ${{ inputs.update_interval_seconds }}
+          Start-Sleep -Seconds $env:INPUT_UPDATE_INTERVAL_SECONDS
         }
