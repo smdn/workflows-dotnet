@@ -145,7 +145,10 @@ jobs:
           --json body `
           --template '{{.body}}'
 
-        if ($release_pr_body -match ([regex]::escape("/${env:INPUT_GITHUB_REPOSITORY}/actions/runs/") + '(?<run_id>[0-9]+)')) {
+        # Convert the array into a single string to perform regular expression matching
+        $release_pr_body_string = "$release_pr_body"
+
+        if ($release_pr_body_string -match ([regex]::escape("/${env:INPUT_GITHUB_REPOSITORY}/actions/runs/") + '(?<run_id>[0-9]+)')) {
           $precedent_workflow_run_id = $Matches['run_id']
         }
         else {
