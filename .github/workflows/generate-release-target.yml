@@ -98,7 +98,7 @@ jobs:
 
     steps:
     - name: Prepare .NET SDK ${{ inputs.dotnet_sdk_version }}
-      uses: smdn/workflows-dotnet/actions/prepare-dotnet-sdk@dad5cdaaa9533ca50f0b8bf2f451afae5c77f876 # actions/prepare-dotnet-sdk/v1.1.0
+      uses: smdn/workflows-dotnet/actions/prepare-dotnet-sdk@e294de483afffc1d3a366fbba853efe23c7b7d4c # actions/prepare-dotnet-sdk/v1.2.0
       with:
         minimal_dotnet_sdk_version: '${{ inputs.dotnet_sdk_version }}'
 
