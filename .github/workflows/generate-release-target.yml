@@ -133,15 +133,20 @@ jobs:
       # note: The tag name must be in format of '<prefix>/<branch>/Package.ID-1.2.3-prerelease'.
       # note: The tag that ends with '-unreleased' will be treated as an unreleasable target where nupkg will not be uploaded.
       shell: pwsh
+      env:
+        INPUT_RELEASE_TARGET_TAG_PREFIX: ${{ inputs.release_target_tag_prefix }}
+        INPUT_RELEASE_TARGET_TAG_NAME: ${{ inputs.release_target_tag_name }}
+        INPUT_PATH_PREFIX_SOURCE: ${{ inputs.path_prefix_source }}
+        INPUT_RELEASE_TAG_PREFIX: ${{ inputs.release_tag_prefix }}
       run: |
         $pattern_target_tag = '^{0}{1}{2}\-{3}(\-{4})?$' -f
-          '${{ inputs.release_target_tag_prefix }}',
+          $env:INPUT_RELEASE_TARGET_TAG_PREFIX,
           '(?<branch>[A-Za-z0-9\.\-]+)/',
           '(?<id>[A-Za-z0-9\.]+)',
           '(?<version>[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?([\-\+][0-9a-zA-Z\.]+)?)',
           '(?<suffix>[A-Za-z0-9]+)'
 
-        $package_target_tag = '${{ inputs.release_target_tag_name }}'
+        $package_target_tag = $env:INPUT_RELEASE_TARGET_TAG_NAME
 
         if ("$package_target_tag" -match "$pattern_target_tag") {
           # split package info and version from tag name
@@ -149,7 +154,7 @@ jobs:
           $package_id = $Matches['id']
           $package_version = $Matches['version']
           $package_id_with_version = '{0}-{1}' -f $package_id, $package_version
-          $package_source_dir = '${{ inputs.path_prefix_source }}{0}/' -f $package_id
+          $package_source_dir = "${env:INPUT_PATH_PREFIX_SOURCE}${package_id}/"
 
           if ( -not ( Test-Path -Path $package_source_dir -PathType Container ) ) {
             "::error::The source directory '${package_source_dir}' was not found.  Make sure that the tag name '${package_target_tag}' indicates a package which is present."
@@ -201,13 +206,13 @@ jobs:
         }
 
         # find the tag of the previous version
-        $package_prevver_ref = git describe --tags --abbrev=0 --match "${{ inputs.release_tag_prefix }}${package_id}-*"
+        $package_prevver_ref = git describe --tags --abbrev=0 --match "${env:INPUT_RELEASE_TAG_PREFIX}${package_id}-*"
 
         if ( $package_prevver_ref ) {
           $package_prevver_tag = $package_prevver_ref
         }
         else {
-          "::warning::could not find a tag of the previous version (${{ inputs.release_tag_prefix }}${package_id}-*)"
+          "::warning::could not find a tag of the previous version (${env:INPUT_RELEASE_TAG_PREFIX}${package_id}-*)"
           $package_prevver_tag = $null
 
           # refer initial commit as previous version instead
@@ -225,8 +230,11 @@ jobs:
     - name: Determine the release info of ${{ steps.package-info.outputs.package_id_with_version }}
       id: release-info
       shell: pwsh
+      env:
+        INPUT_RELEASE_TAG_PREFIX: ${{ inputs.release_tag_prefix }}
+        INPUT_PACKAGE_ID_WITH_VERSION: ${{ steps.package-info.outputs.package_id_with_version }}
       run: |
-        $release_tag = '${{ inputs.release_tag_prefix }}${{ steps.package-info.outputs.package_id_with_version }}'
+        $release_tag = "${env:INPUT_RELEASE_TAG_PREFIX}${env:INPUT_PACKAGE_ID_WITH_VERSION}"
         $release_working_branch = "${release_tag}-$([DateTimeOffset]::UtcNow.ToUnixTimeSeconds().ToString("D"))"
 
         # notice determined info
@@ -242,17 +250,23 @@ jobs:
         "working_branch=${release_working_branch}" >> $Env:GITHUB_OUTPUT
 
     - name: Prepare for updating API list of ${{ steps.package-info.outputs.package_id }}
+      shell: pwsh
+      env:
+        INPUT_PATH_PREFIX_APILIST: ${{ inputs.path_prefix_apilist }}
+        INPUT_PACKAGE_ID: ${{ steps.package-info.outputs.package_id }}
       run: |
         # delete existing API list files firstly to make the API list of reduced target frameworks removed from the history
         # this must be done before the generation of new API list, i.e. before running the target 'Build' or 'Pack'.
-        git rm --ignore-unmatch '${{ inputs.path_prefix_apilist }}${{ steps.package-info.outputs.package_id }}/*.apilist.cs'
+        git rm --ignore-unmatch "${env:INPUT_PATH_PREFIX_APILIST}${env:INPUT_PACKAGE_ID}/*.apilist.cs"
 
     - name: Set NUGET_PACKAGES
       id: set-nuget-packages
       shell: pwsh
+      env:
+        INPUT_GITHUB_WORKSPACE: ${{ github.workspace }}
       run: |
         $path_to_nuget_packages =[System.IO.Path]::Combine(
-          '${{ github.workspace }}',
+          $env:INPUT_GITHUB_WORKSPACE,
           '.nuget',
           'packages'
         )
@@ -284,13 +298,18 @@ jobs:
 
     - name: Restore dependencies of ${{ steps.package-info.outputs.package_id }}
       shell: pwsh
+      env:
+        INPUT_PACKAGE_SOURCE_DIR: ${{ steps.package-info.outputs.package_source_dir }}
       run: |
         dotnet restore `
           --nologo `
-          ${{ steps.package-info.outputs.package_source_dir }}
+          $env:INPUT_PACKAGE_SOURCE_DIR
 
     - name: Build ${{ steps.package-info.outputs.package_id }}
       shell: pwsh
+      env:
+        INPUT_PACKAGE_BRANCH: ${{ steps.package-info.outputs.package_branch }}
+        INPUT_PACKAGE_SOURCE_DIR: ${{ steps.package-info.outputs.package_source_dir }}
       run: |
         # build the options for `dotnet build`
         # note:
@@ -302,8 +321,8 @@ jobs:
           '--configuration', 'Release',
           '--nologo',
           '-consoleLoggerParameters:NoSummary',
-          '/p:RepositoryBranch=${{ steps.package-info.outputs.package_branch }}',
-          '${{ steps.package-info.outputs.package_source_dir }}'
+          "/p:RepositoryBranch=${env:INPUT_PACKAGE_BRANCH}",
+          $env:INPUT_PACKAGE_SOURCE_DIR
         )
 
         # then build
@@ -335,25 +354,30 @@ jobs:
     - name: Pack ${{ steps.package-info.outputs.package_id }}
       id: pack
       shell: pwsh
+      env:
+        INPUT_PACKAGE_BRANCH: ${{ steps.package-info.outputs.package_branch }}
+        INPUT_PACKAGE_SOURCE_DIR: ${{ steps.package-info.outputs.package_source_dir }}
+        INPUT_PACKAGE_ID: ${{ steps.package-info.outputs.package_id }}
+        INPUT_PACKAGE_VERSION: ${{ steps.package-info.outputs.package_version }}
       run: |
         # build the options for `dotnet pack`
         $dotnet_pack_options = @(
           '--configuration', 'Release',
           '--nologo',
           '--no-build',
-          '/p:RepositoryBranch=${{ steps.package-info.outputs.package_branch }}',
-          '${{ steps.package-info.outputs.package_source_dir }}'
+          "/p:RepositoryBranch=${env:INPUT_PACKAGE_BRANCH}",
+          $env:INPUT_PACKAGE_SOURCE_DIR
         )
 
         # then pack
         "dotnet pack ${dotnet_pack_options}"
         dotnet pack @dotnet_pack_options
 
-        $file_nupkg  = '${{ steps.package-info.outputs.package_id }}.${{ steps.package-info.outputs.package_version }}.nupkg'
-        $file_nuspec = '${{ steps.package-info.outputs.package_id }}.${{ steps.package-info.outputs.package_version }}.nuspec'
+        $file_nupkg  = "${env:INPUT_PACKAGE_ID}.${env:INPUT_PACKAGE_VERSION}.nupkg"
+        $file_nuspec = "${env:INPUT_PACKAGE_ID}.${env:INPUT_PACKAGE_VERSION}.nuspec"
 
-        $expected_nupkg  = "${{ steps.package-info.outputs.package_source_dir }}bin/Release/${file_nupkg}"
-        $expected_nuspec = "${{ steps.package-info.outputs.package_source_dir }}obj/Release/${file_nuspec}"
+        $expected_nupkg  = "${env:INPUT_PACKAGE_SOURCE_DIR}bin/Release/${file_nupkg}"
+        $expected_nuspec = "${env:INPUT_PACKAGE_SOURCE_DIR}obj/Release/${file_nuspec}"
 
         # test generated file
         if (
@@ -373,7 +397,7 @@ jobs:
           "path_nuspec=${expected_nuspec}" >> $Env:GITHUB_OUTPUT
         }
         else {
-          "::error::'${expected_nupkg}' was not generated. Make sure that the Version/VersionPrefix/VersionSuffix in '${{ steps.package-info.outputs.package_id }}.csproj' are defined correctly."
+          "::error::'${expected_nupkg}' was not generated. Make sure that the Version/VersionPrefix/VersionSuffix in '${env:INPUT_PACKAGE_ID}.csproj' are defined correctly."
           exit 1
         }
 
@@ -389,9 +413,12 @@ jobs:
       id: nuspec-diff
       continue-on-error: true
       shell: pwsh
+      env:
+        INPUT_PATH_NUSPEC: ${{ steps.pack.outputs.path_nuspec }}
+        INPUT_PACKAGE_SOURCE_DIR: ${{ steps.package-info.outputs.package_source_dir }}
       run: |
-        $path_nuspec_diff = [System.IO.Path]::GetFullPath('${{ steps.pack.outputs.path_nuspec }}.diff')
-        $path_nuspec_diff_except_files = [System.IO.Path]::GetFullPath('${{ steps.pack.outputs.path_nuspec }}.except-files.diff')
+        $path_nuspec_diff = [System.IO.Path]::GetFullPath("${env:INPUT_PATH_NUSPEC}.diff")
+        $path_nuspec_diff_except_files = [System.IO.Path]::GetFullPath("${env:INPUT_PATH_NUSPEC}.except-files.diff")
 
         dotnet msbuild /t:GenerateNuspecDifference `
           -nologo `
@@ -400,7 +427,7 @@ jobs:
           /p:APIListEnableGenerating=false `
           /p:NuspecDifferenceOutputPath="$path_nuspec_diff" `
           /p:NuspecDifferenceExceptFilesOutputPath="$path_nuspec_diff_except_files" `
-          ${{ steps.package-info.outputs.package_source_dir }}
+          $env:INPUT_PACKAGE_SOURCE_DIR
 
         '## :package: .nuspec diff'   >> $Env:GITHUB_STEP_SUMMARY
         ''                            >> $Env:GITHUB_STEP_SUMMARY
@@ -413,52 +440,84 @@ jobs:
         "path_nuspec_diff_except_files=${path_nuspec_diff_except_files}" >> $Env:GITHUB_OUTPUT
 
     - name: Create release working branch for ${{ steps.package-info.outputs.package_id_with_version }}
+      shell: pwsh
+      env:
+        INPUT_WORKING_BRANCH: ${{ steps.release-info.outputs.working_branch }}
+        INPUT_PATH_PREFIX_APILIST: ${{ inputs.path_prefix_apilist }}
+        INPUT_PACKAGE_ID: ${{ steps.package-info.outputs.package_id }}
+        INPUT_PACKAGE_ID_WITH_VERSION: ${{ steps.package-info.outputs.package_id_with_version }}
+        INPUT_DRY_RUN: ${{ inputs.dry_run == true }}
       run: |
+        $dry_run = $env:INPUT_DRY_RUN -ieq 'true'
+
         # create release working branch from detached HEAD
-        git checkout -b '${{ steps.release-info.outputs.working_branch }}'
+        git checkout -b $env:INPUT_WORKING_BRANCH
 
         # attempt to add changes of API list
-        API_LIST_DIR='${{ inputs.path_prefix_apilist }}${{ steps.package-info.outputs.package_id }}'
+        $api_list_dir = "${env:INPUT_PATH_PREFIX_APILIST}${env:INPUT_PACKAGE_ID}"
+        $has_commit = $false
 
-        if [ -d "$API_LIST_DIR" ]; then
-          if git add "${API_LIST_DIR}/*.apilist.cs"; then
+        if ( Test-Path -Path $api_list_dir -PathType Container ) {
+          git add "${api_list_dir}/*.apilist.cs"
+
+          if ( $LASTEXITCODE -eq 0 ) {
             # commit API list changes to release working branch
-            if git commit -m "update API list ${{ steps.package-info.outputs.package_id_with_version }}"; then
-              HAS_COMMIT=true
-            fi
-          else
-            echo "The API list has no changes."
-          fi
-        else
-          echo "The API list was not generated."
-        fi
+            git commit -m "update API list ${env:INPUT_PACKAGE_ID_WITH_VERSION}"
 
-        if [ -z "$HAS_COMMIT" ]; then
-          echo "## API list" >> $GITHUB_STEP_SUMMARY
-          echo "The API list was not generated or has no changes." >> $GITHUB_STEP_SUMMARY
+            if ( $LASTEXITCODE -eq 0 ) {
+              $has_commit = $true
+            }
+          }
+          else {
+            "The API list has no changes."
+          }
+        }
+        else {
+          "The API list was not generated."
+        }
+
+        if ( -not $has_commit ) {
+          "## API list" >> $Env:GITHUB_STEP_SUMMARY
+          "The API list was not generated or has no changes." >> $Env:GITHUB_STEP_SUMMARY
 
           # commit an empty commit instead. it is required to create pull request.
-          git commit --allow-empty -m "create release branch for ${{ steps.package-info.outputs.package_id_with_version }}"
-        fi
+          git commit --allow-empty -m "create release branch for ${env:INPUT_PACKAGE_ID_WITH_VERSION}"
+        }
 
         # push release working branch to create pull request
-        if [[ '${{ inputs.dry_run }}' != 'true' ]]; then
-          git push origin ${{ steps.release-info.outputs.working_branch }}
-        fi
+        if ( -not $dry_run ) {
+          git push origin $env:INPUT_WORKING_BRANCH
+        }
 
     - name: Create extra release contents
       id: extra-release-contents
       shell: pwsh
+      env:
+        INPUT_PATH_NUSPEC_DIFF: ${{ steps.nuspec-diff.outputs.path_nuspec_diff }}
+        INPUT_PATH_NUSPEC_DIFF_EXCEPT_FILES: ${{ steps.nuspec-diff.outputs.path_nuspec_diff_except_files }}
+        INPUT_PACKAGE_ID_WITH_VERSION: ${{ steps.package-info.outputs.package_id_with_version }}
+        INPUT_PACKAGE_BRANCH: ${{ steps.package-info.outputs.package_branch }}
+        INPUT_PACKAGE_PREVVER_REF: ${{ steps.package-info.outputs.package_prevver_ref }}
+        INPUT_GITHUB_SERVER_URL: ${{ github.server_url }}
+        INPUT_GITHUB_REPOSITORY: ${{ github.repository }}
+        INPUT_PACKAGE_SOURCE_DIR: ${{ steps.package-info.outputs.package_source_dir }}
+        INPUT_GITHUB_SHA: ${{ github.sha }}
+        INPUT_WORKING_BRANCH: ${{ steps.release-info.outputs.working_branch }}
+        INPUT_PATH_PREFIX_APILIST: ${{ inputs.path_prefix_apilist }}
+        INPUT_PACKAGE_ID: ${{ steps.package-info.outputs.package_id }}
+        INPUT_DRY_RUN: ${{ inputs.dry_run == true }}
       run: |
-        if (Test-Path -Path '${{ steps.nuspec-diff.outputs.path_nuspec_diff }}') {
-          $nuspec_diff = Get-Content -Path '${{ steps.nuspec-diff.outputs.path_nuspec_diff }}'
+        $dry_run = $env:INPUT_DRY_RUN -ieq 'true'
+
+        if (Test-Path -Path $env:INPUT_PATH_NUSPEC_DIFF) {
+          $nuspec_diff = Get-Content -Path $env:INPUT_PATH_NUSPEC_DIFF
         }
         else {
           $nuspec_diff = ''
         }
 
-        if (Test-Path -Path '${{ steps.nuspec-diff.outputs.path_nuspec_diff_except_files }}') {
-          $nuspec_diff_except_files = Get-Content -Path '${{ steps.nuspec-diff.outputs.path_nuspec_diff_except_files }}'
+        if (Test-Path -Path $env:INPUT_PATH_NUSPEC_DIFF_EXCEPT_FILES) {
+          $nuspec_diff_except_files = Get-Content -Path $env:INPUT_PATH_NUSPEC_DIFF_EXCEPT_FILES
         }
         else {
           $nuspec_diff_except_files = ''
@@ -477,10 +536,10 @@ jobs:
           },
           [PSCustomObject]@{
             # this entry is expected to be shown as a gist's summary
-            Title = '${{ steps.package-info.outputs.package_id_with_version }} Release Notes'
+            Title = "${env:INPUT_PACKAGE_ID_WITH_VERSION} Release Notes"
             Target = "releasenote"
-            FileName = 'releasenote-${{ steps.package-info.outputs.package_id_with_version }}.md'
-            Content = '${{ steps.package-info.outputs.package_branch }}/${{ steps.package-info.outputs.package_id_with_version }}'
+            FileName = "releasenote-${env:INPUT_PACKAGE_ID_WITH_VERSION}.md"
+            Content = "${env:INPUT_PACKAGE_BRANCH}/${env:INPUT_PACKAGE_ID_WITH_VERSION}"
             OutputToSummaryIfExceededMaxChars = $false
           },
           [PSCustomObject]@{
@@ -488,10 +547,10 @@ jobs:
             Target = "releasenote"
             FileName = 'releasenote.section1.changelog.md'
             Content = git log `
-              ${{ steps.package-info.outputs.package_prevver_ref }}..HEAD `
-              --pretty=format:'- %cs [%s](${{ github.server_url }}/${{ github.repository }}/commit/%H)' `
+              "${env:INPUT_PACKAGE_PREVVER_REF}..HEAD" `
+              "--pretty=format:- %cs [%s](${env:INPUT_GITHUB_SERVER_URL}/${env:INPUT_GITHUB_REPOSITORY}/commit/%H)" `
               -- `
-              ${{ steps.package-info.outputs.package_source_dir }} `
+              $env:INPUT_PACKAGE_SOURCE_DIR `
               | jq -Rr `@html
             OutputToSummaryIfExceededMaxChars = $false
           },
@@ -502,9 +561,9 @@ jobs:
             Content = git diff `
               --no-renames `
               --unified=10000 `
-              ${{ github.sha }}..${{ steps.release-info.outputs.working_branch }} `
+              "${env:INPUT_GITHUB_SHA}..${env:INPUT_WORKING_BRANCH}" `
               -- `
-              '${{ inputs.path_prefix_apilist }}${{ steps.package-info.outputs.package_id }}/'
+              "${env:INPUT_PATH_PREFIX_APILIST}${env:INPUT_PACKAGE_ID}/"
             OutputToSummaryIfExceededMaxChars = $false
           },
           [PSCustomObject]@{
@@ -523,15 +582,15 @@ jobs:
               --ignore-space-at-eol `
               --ignore-all-space `
               --ignore-blank-lines `
-              ${{ steps.package-info.outputs.package_prevver_ref }}..HEAD `
+              "${env:INPUT_PACKAGE_PREVVER_REF}..HEAD" `
               -- `
-              ${{ steps.package-info.outputs.package_source_dir }}
+              $env:INPUT_PACKAGE_SOURCE_DIR
             OutputToSummaryIfExceededMaxChars = $false
           }
         )
 
         foreach ($content in $contents) {
-          if ( '${{ inputs.dry_run }}' -ieq 'true' ) {
+          if ($dry_run) {
             "########## $($content.Title) ###########"
             $content.Content
           }
@@ -554,13 +613,17 @@ jobs:
       shell: pwsh
       env:
         GH_TOKEN: ${{ secrets.token_gist }}
+        INPUT_DRY_RUN: ${{ inputs.dry_run == true }}
+        INPUT_PACKAGE_ID: ${{ steps.package-info.outputs.package_id }}
+        INPUT_PACKAGE_VERSION: ${{ steps.package-info.outputs.package_version }}
+        INPUT_CONTENTS: ${{ steps.extra-release-contents.outputs.contents }}
       run: |
-        $dry_run = '${{ inputs.dry_run }}' -ieq 'true'
-        $description = '${{ steps.package-info.outputs.package_id }} ${{ steps.package-info.outputs.package_version }} Release Notes'
+        $dry_run = $env:INPUT_DRY_RUN -ieq 'true'
+        $description = "${env:INPUT_PACKAGE_ID} ${env:INPUT_PACKAGE_VERSION} Release Notes"
 
         # 'select' returns single scalar value if number of selected item is zero, so converts to an array again
         $files = @(
-          '${{ steps.extra-release-contents.outputs.contents }}' |
+          $env:INPUT_CONTENTS |
           ConvertFrom-Json |
           where Target -eq 'releasenote' |
           select -ExpandProperty FileName
@@ -593,9 +656,31 @@ jobs:
       shell: pwsh
       env:
         GH_TOKEN: ${{ secrets.token_pullrequest }}
+        INPUT_DRY_RUN: ${{ inputs.dry_run == true }}
+        INPUT_PACKAGE_BRANCH: ${{ steps.package-info.outputs.package_branch }}
+        INPUT_PACKAGE_ID_WITH_VERSION: ${{ steps.package-info.outputs.package_id_with_version }}
+        INPUT_GITHUB_WORKFLOW: ${{ github.workflow }}
+        INPUT_GITHUB_RUN_NUMBER: ${{ github.run_number }}
+        INPUT_GITHUB_SERVER_URL: ${{ github.server_url }}
+        INPUT_GITHUB_REPOSITORY: ${{ github.repository }}
+        INPUT_GITHUB_RUN_ID: ${{ github.run_id }}
+        INPUT_PACKAGE_TARGET_TAG: ${{ steps.package-info.outputs.package_target_tag }}
+        INPUT_PACKAGE_PREVVER_REF: ${{ steps.package-info.outputs.package_prevver_ref }}
+        INPUT_PACKAGE_PREVVER_TAG: ${{ steps.package-info.outputs.package_prevver_tag }}
+        INPUT_PACKAGE_ID: ${{ steps.package-info.outputs.package_id }}
+        INPUT_PACKAGE_VERSION: ${{ steps.package-info.outputs.package_version }}
+        INPUT_WORKING_BRANCH: ${{ steps.release-info.outputs.working_branch }}
+        INPUT_TAG: ${{ steps.release-info.outputs.tag }}
+        INPUT_PACKAGE_CAN_RELEASE: ${{ steps.package-info.outputs.package_can_release }}
+        INPUT_PACKAGE_IS_PRERELEASE: ${{ steps.package-info.outputs.package_is_prerelease }}
+        INPUT_URL: ${{ steps.releasenote.outputs.url }}
+        INPUT_ARTIFACT_NAME_NUPKG: ${{ steps.pack.outputs.artifact_name_nupkg }}
+        INPUT_CONTENTS: ${{ steps.extra-release-contents.outputs.contents }}
+        INPUT_GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
+        INPUT_RELEASE_TARGET_PR_LABEL: ${{ inputs.release_target_pr_label }}
       run: |
-        $dry_run = '${{ inputs.dry_run }}' -ieq 'true'
-        $pr_title = 'Release ${{ steps.package-info.outputs.package_branch }}/${{ steps.package-info.outputs.package_id_with_version }}'
+        $dry_run = $env:INPUT_DRY_RUN -ieq 'true'
+        $pr_title = "Release ${env:INPUT_PACKAGE_BRANCH}/${env:INPUT_PACKAGE_ID_WITH_VERSION}"
 
         # limit the maximum number of characters in the PR body text to the value below
         # 'pull request create failed: GraphQL: Body is too long (maximum is 65536 characters) (createPullRequest)'
@@ -609,38 +694,38 @@ jobs:
 
         [void]$pr_body.AppendFormat(
           'Automatically generated by workflow [{0} #{1}]({2}).',
-          '${{ github.workflow }}',
-          '${{ github.run_number }}',
-          '${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}'
+          $env:INPUT_GITHUB_WORKFLOW,
+          $env:INPUT_GITHUB_RUN_NUMBER,
+          "${env:INPUT_GITHUB_SERVER_URL}/${env:INPUT_GITHUB_REPOSITORY}/actions/runs/${env:INPUT_GITHUB_RUN_ID}"
         ).AppendLine()
         [void]$pr_body.AppendLine()
 
         [void]$pr_body.AppendLine('# Release target')
-        [void]$pr_body.AppendLine('- package_target_tag: `${{ steps.package-info.outputs.package_target_tag }}`')
-        [void]$pr_body.AppendLine('- package_prevver_ref: `${{ steps.package-info.outputs.package_prevver_ref }}`')
-        if ('${{ steps.package-info.outputs.package_prevver_tag }}') {
-          [void]$pr_body.AppendLine('- package_prevver_tag: `${{ steps.package-info.outputs.package_prevver_tag }}`')
+        [void]$pr_body.AppendLine("- package_target_tag: ``${env:INPUT_PACKAGE_TARGET_TAG}``")
+        [void]$pr_body.AppendLine("- package_prevver_ref: ``${env:INPUT_PACKAGE_PREVVER_REF}``")
+        if ($env:INPUT_PACKAGE_PREVVER_TAG) {
+          [void]$pr_body.AppendLine("- package_prevver_tag: ``${env:INPUT_PACKAGE_PREVVER_TAG}``")
         }
         else {
           [void]$pr_body.AppendLine('- package_prevver_tag: -')
         }
-        [void]$pr_body.AppendLine('- package_id: `${{ steps.package-info.outputs.package_id }}`')
-        [void]$pr_body.AppendLine('- package_id_with_version: `${{ steps.package-info.outputs.package_id_with_version }}`')
-        [void]$pr_body.AppendLine('- package_version: `${{ steps.package-info.outputs.package_version }}`')
-        [void]$pr_body.AppendLine('- package_branch: `${{ steps.package-info.outputs.package_branch }}`')
-        [void]$pr_body.AppendLine('- release_working_branch: `${{ steps.release-info.outputs.working_branch }}`')
-        [void]$pr_body.AppendLine('- release_tag: `${{ steps.release-info.outputs.tag }}`')
-        if ( '${{ steps.package-info.outputs.package_can_release }}' -ieq 'True' ) {
-          [void]$pr_body.AppendLine('- release_prerelease: `${{ steps.package-info.outputs.package_is_prerelease }}` ❗Change this value to `true` to publish release note as a prerelease.')
+        [void]$pr_body.AppendLine("- package_id: ``${env:INPUT_PACKAGE_ID}``")
+        [void]$pr_body.AppendLine("- package_id_with_version: ``${env:INPUT_PACKAGE_ID_WITH_VERSION}``")
+        [void]$pr_body.AppendLine("- package_version: ``${env:INPUT_PACKAGE_VERSION}``")
+        [void]$pr_body.AppendLine("- package_branch: ``${env:INPUT_PACKAGE_BRANCH}``")
+        [void]$pr_body.AppendLine("- release_working_branch: ``${env:INPUT_WORKING_BRANCH}``")
+        [void]$pr_body.AppendLine("- release_tag: ``${env:INPUT_TAG}``")
+        if ( $env:INPUT_PACKAGE_CAN_RELEASE -ieq 'True' ) {
+          [void]$pr_body.AppendLine("- release_prerelease: ``${env:INPUT_PACKAGE_IS_PRERELEASE}`` ❗Change this value to `true` to publish release note as a prerelease.")
         }
         else {
           [void]$pr_body.AppendLine('- release_prerelease: `true`')
         }
         [void]$pr_body.AppendLine('- release_draft: `false` ❗Change this value to `true` to publish release note as a draft.')
-        [void]$pr_body.AppendLine('- release_note_url: [`${{ steps.releasenote.outputs.url }}`](${{ steps.releasenote.outputs.url }})')
+        [void]$pr_body.AppendLine("- release_note_url: [``${env:INPUT_URL}``](${env:INPUT_URL})")
 
-        if ( '${{ steps.package-info.outputs.package_can_release }}' -ieq 'True' ) {
-          [void]$pr_body.AppendLine('- artifact_name_nupkg: `${{ steps.pack.outputs.artifact_name_nupkg }}` ❗Remove this line or change this value to empty to prevent publishing packages.')
+        if ( $env:INPUT_PACKAGE_CAN_RELEASE -ieq 'True' ) {
+          [void]$pr_body.AppendLine("- artifact_name_nupkg: ``${env:INPUT_ARTIFACT_NAME_NUPKG}`` ❗Remove this line or change this value to empty to prevent publishing packages.")
         }
 
         [void]$pr_body.AppendLine()
@@ -649,7 +734,7 @@ jobs:
         # append extra contents
         #
         $pr_body_content_has_redirected_to_step_summary = $false
-        $pr_body_contents = '${{ steps.extra-release-contents.outputs.contents }}' |
+        $pr_body_contents = $env:INPUT_CONTENTS |
           ConvertFrom-Json |
           where Target -eq 'pullrequest'
 
@@ -697,9 +782,9 @@ jobs:
 
         # ref: https://cli.github.com/manual/gh_pr_create
         $pr_create_options = @(
-          '--base', '${{ steps.package-info.outputs.package_branch }}',
-          '--head', '${{ steps.release-info.outputs.working_branch }}',
-          '--assignee', '${{ github.repository_owner }}',
+          '--base', $env:INPUT_PACKAGE_BRANCH,
+          '--head', $env:INPUT_WORKING_BRANCH,
+          '--assignee', $env:INPUT_GITHUB_REPOSITORY_OWNER,
           '--no-maintainer-edit',
           '--title', $pr_title,
           '--body-file', $pr_body_file
@@ -707,9 +792,9 @@ jobs:
 
         $pr_create_with_label_options = $null
 
-        if ( ! [string]::IsNullOrEmpty( '${{ inputs.release_target_pr_label }}' ) ) {
+        if ( ! [string]::IsNullOrEmpty( $env:INPUT_RELEASE_TARGET_PR_LABEL ) ) {
           $pr_create_with_label_options = $pr_create_options + @(
-            '--label', '${{ inputs.release_target_pr_label }}'
+            '--label', $env:INPUT_RELEASE_TARGET_PR_LABEL
           )
         }
 
@@ -724,7 +809,7 @@ jobs:
             : $(gh pr create $pr_create_with_label_options)
 
           if ( [string]::IsNullOrEmpty($pr_url) ) {
-            "::error::Could not create a new pull request or could not set label to the created pull request. Ensure that the label '${{ inputs.release_target_pr_label }}' is created and set the label to PR manually."
+            "::error::Could not create a new pull request or could not set label to the created pull request. Ensure that the label '${env:INPUT_RELEASE_TARGET_PR_LABEL}' is created and set the label to PR manually."
           }
         }
 
@@ -755,21 +840,28 @@ jobs:
     - name: Dispose pull request
       continue-on-error: true
       if: inputs.dry_run != 'true' && (failure() || cancelled()) && steps.pullrequest.outputs.url != ''
+      shell: pwsh
       env:
         GH_TOKEN: ${{ secrets.token_pullrequest }}
+        INPUT_PULLREQUEST_URL: ${{ steps.pullrequest.outputs.url }}
       run: |
-        gh pr close ${{ steps.pullrequest.outputs.url }} --delete-branch --comment 'This release target was cancelled or failed.'
+        gh pr close $env:INPUT_PULLREQUEST_URL --delete-branch --comment 'This release target was cancelled or failed.'
 
     - name: Dispose release working branch
       continue-on-error: true
       if: inputs.dry_run != 'true' && (failure() || cancelled())
+      shell: pwsh
+      env:
+        INPUT_WORKING_BRANCH: ${{ steps.release-info.outputs.working_branch }}
       run: |
-        git push origin :${{ steps.release-info.outputs.working_branch }}
+        git push origin ":${env:INPUT_WORKING_BRANCH}"
 
     - name: Dispose release note
       continue-on-error: true
       if: inputs.dry_run != 'true' && (failure() || cancelled()) && steps.releasenote.outputs.url != ''
+      shell: pwsh
       env:
         GH_TOKEN: ${{ secrets.token_gist }}
+        INPUT_RELEASENOTE_URL: ${{ steps.releasenote.outputs.url }}
       run: |
-        gh gist delete ${{ steps.releasenote.outputs.url }}
+        gh gist delete $env:INPUT_RELEASENOTE_URL

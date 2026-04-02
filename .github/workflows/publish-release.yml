@@ -90,21 +90,31 @@ jobs:
       id: release-notes-file
       env:
         GH_TOKEN: ${{ secrets.token_gist }}
+        INPUT_DRY_RUN: ${{ inputs.dry_run == true }}
+        INPUT_PACKAGE_AVAILABLE_NUGET_ORG: ${{ inputs.package_available_nuget_org == true }}
+        INPUT_PACKAGE_ID: ${{ inputs.package_id }}
+        INPUT_PACKAGE_VERSION: ${{ inputs.package_version }}
+        INPUT_RELEASE_NOTE_URL: ${{ inputs.release_note_url }}
+        INPUT_GITHUB_REPOSITORY: ${{ github.repository }}
+        INPUT_RELEASE_TAG: ${{ inputs.release_tag }}
+        INPUT_PACKAGE_BRANCH: ${{ inputs.package_branch }}
+        INPUT_PACKAGE_PREVVER_TAG: ${{ inputs.package_prevver_tag }}
       shell: pwsh
       run: |
-        $dry_run = '${{ inputs.dry_run }}' -ieq 'true'
+        $dry_run = $env:INPUT_DRY_RUN -ieq 'true'
+        $is_package_available_nuget_org = $env:INPUT_PACKAGE_AVAILABLE_NUGET_ORG -ieq 'true'
 
         # note: the maximum size of the release body seems to be 125,000 characters (textarea#release_body@data-input-max-length="125000")
         $release_notes_body_max_length = 125000
         $release_notes_body = New-Object System.Text.StringBuilder -ArgumentList 10240
         $release_notes_output_path = [System.IO.Path]::GetFullPath('releasenotes.md')
 
-        if ( '${{ inputs.package_available_nuget_org }}' -ieq 'true' -Or $dry_run ) {
+        if ( $is_package_available_nuget_org -Or $dry_run ) {
           [void]$release_notes_body.AppendLine('# Released package')
           [void]$release_notes_body.AppendFormat(
             '- NuGet [{0} version {1}](https://www.nuget.org/packages/{0}/{1})',
-            '${{ inputs.package_id }}',
-            '${{ inputs.package_version }}'
+            $env:INPUT_PACKAGE_ID,
+            $env:INPUT_PACKAGE_VERSION
           ).AppendLine()
           [void]$release_notes_body.AppendLine()
         }
@@ -114,7 +124,7 @@ jobs:
         # If the body exceeds the maximum length when appended, will cancel appending.
         #
         [void]$release_notes_body.AppendLine('# Release notes')
-        [void]$release_notes_body.AppendLine('The [full release notes](${{ inputs.release_note_url }}) are available at gist.')
+        [void]$release_notes_body.AppendLine("The [full release notes](${env:INPUT_RELEASE_NOTE_URL}) are available at gist.")
         [void]$release_notes_body.AppendLine()
 
         $release_note_sections = @(
@@ -189,7 +199,7 @@ jobs:
 
         # list release note files from gist
         $release_note_files = gh gist view `
-          '${{ inputs.release_note_url }}' `
+          $env:INPUT_RELEASE_NOTE_URL `
           --files
 
         # download release note files
@@ -203,7 +213,7 @@ jobs:
           }
 
           $release_note_content = gh gist view `
-            '${{ inputs.release_note_url }}' `
+            $env:INPUT_RELEASE_NOTE_URL `
             --raw `
             --filename $release_note_file
 
@@ -241,16 +251,16 @@ jobs:
         $release_api_generate_notes_options = @(
           '--method', 'POST',
           '-H', 'Accept: application/vnd.github+json',
-          '/repos/${{ github.repository }}/releases/generate-notes',
-          '-f', 'tag_name=${{ inputs.release_tag }}',
-          '-f', 'target_commitish=${{ inputs.package_branch }}'
+          "/repos/${env:INPUT_GITHUB_REPOSITORY}/releases/generate-notes",
+          '-f', "tag_name=${env:INPUT_RELEASE_TAG}",
+          '-f', "target_commitish=${env:INPUT_PACKAGE_BRANCH}"
         )
 
-        $package_prevver_tag = '${{ inputs.package_prevver_tag }}'
+        $package_prevver_tag = $env:INPUT_PACKAGE_PREVVER_TAG
 
         if ( $package_prevver_tag ) {
           $release_api_generate_notes_options += @(
-            '-f', 'previous_tag_name=${{ inputs.package_prevver_tag }}'
+            '-f', "previous_tag_name=${env:INPUT_PACKAGE_PREVVER_TAG}"
           )
         }
 
@@ -290,30 +300,39 @@ jobs:
     - name: Publish release for ${{ inputs.release_tag }}
       env:
         GH_TOKEN: ${{ secrets.token_new_release }}
+        INPUT_DRY_RUN: ${{ inputs.dry_run == true }}
+        INPUT_PATH: ${{ steps.release-notes-file.outputs.path }}
+        INPUT_PACKAGE_ID: ${{ inputs.package_id }}
+        INPUT_PACKAGE_VERSION: ${{ inputs.package_version }}
+        INPUT_GITHUB_REPOSITORY: ${{ github.repository }}
+        INPUT_PACKAGE_BRANCH: ${{ inputs.package_branch }}
+        INPUT_RELEASE_PRERELEASE: ${{ inputs.release_prerelease == true }}
+        INPUT_RELEASE_DRAFT: ${{ inputs.release_draft == true }}
+        INPUT_RELEASE_TAG: ${{ inputs.release_tag }}
       shell: pwsh
       run: |
-        $dry_run = '${{ inputs.dry_run }}' -ieq 'true'
+        $dry_run = $env:INPUT_DRY_RUN -ieq 'true'
 
-        $release_notes_file = '${{ steps.release-notes-file.outputs.path }}'
-        $release_title = '${{ inputs.package_id }} version ${{ inputs.package_version }}'
+        $release_notes_file = $env:INPUT_PATH
+        $release_title = "${env:INPUT_PACKAGE_ID} version ${env:INPUT_PACKAGE_VERSION}"
 
         "release notes file: '${release_notes_file}', $($([System.IO.FileInfo] $release_notes_file).Length) bytes"
 
         $release_create_options = @(
-          '--repo', '${{ github.repository }}',
+          '--repo', $env:INPUT_GITHUB_REPOSITORY,
           '--title', $release_title,
-          '--target', '${{ inputs.package_branch }}',
+          '--target', $env:INPUT_PACKAGE_BRANCH,
           '--notes-file', $release_notes_file
         )
 
-        if ( '${{ inputs.release_prerelease }}' -ieq 'true' ) {
+        if ( $env:INPUT_RELEASE_PRERELEASE -ieq 'true' ) {
           $release_create_options += '--prerelease'
         }
-        if ( '${{ inputs.release_draft }}' -ieq 'true' ) {
+        if ( $env:INPUT_RELEASE_DRAFT -ieq 'true' ) {
           $release_create_options += '--draft'
         }
 
-        $release_create_options += '${{ inputs.release_tag }}'
+        $release_create_options += $env:INPUT_RELEASE_TAG
 
         "gh release create ${release_create_options}"
 

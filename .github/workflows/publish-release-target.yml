@@ -108,11 +108,14 @@ jobs:
       if: ${{ inputs.pr_label_request_for_release != '' }}
       env:
         GH_TOKEN: ${{ secrets.token_repo }}
+        INPUT_PR_NUMBER_REQUEST_FOR_RELEASE: ${{ inputs.pr_number_request_for_release }}
+        INPUT_GITHUB_REPOSITORY: ${{ github.repository }}
+        INPUT_PR_LABEL_REQUEST_FOR_RELEASE: ${{ inputs.pr_label_request_for_release }}
       shell: pwsh
       run: |
         $labels = gh pr view `
-          ${{ inputs.pr_number_request_for_release }} `
-          --repo ${{ github.repository }} `
+          $env:INPUT_PR_NUMBER_REQUEST_FOR_RELEASE `
+          --repo $env:INPUT_GITHUB_REPOSITORY `
           --json labels `
           --template '[ {{ range $i, $l := .labels }} {{if $i}},{{end}} ''{{$l.name}}'' {{ end }} ]'
 
@@ -120,11 +123,11 @@ jobs:
 
         $release_pr_label = $labels | `
           ConvertFrom-Json | `
-          where { $_ -eq '${{ inputs.pr_label_request_for_release }}' } | `
+          where { $_ -eq $env:INPUT_PR_LABEL_REQUEST_FOR_RELEASE } | `
           select -First 1
 
         if ( [string]::IsNullOrEmpty( $release_pr_label ) ) {
-          "::error::The required label '${{ inputs.pr_label_request_for_release }}' is not set to the pull request."
+          "::error::The required label '${env:INPUT_PR_LABEL_REQUEST_FOR_RELEASE}' is not set to the pull request."
           exit 1
         }
 
@@ -132,15 +135,17 @@ jobs:
       id: release-info
       env:
         GH_TOKEN: ${{ secrets.token_repo }}
+        INPUT_PR_NUMBER_REQUEST_FOR_RELEASE: ${{ inputs.pr_number_request_for_release }}
+        INPUT_GITHUB_REPOSITORY: ${{ github.repository }}
       shell: pwsh
       run: |
         $release_pr_body = gh pr view `
-          ${{ inputs.pr_number_request_for_release }} `
-          --repo ${{ github.repository }} `
+          $env:INPUT_PR_NUMBER_REQUEST_FOR_RELEASE `
+          --repo $env:INPUT_GITHUB_REPOSITORY `
           --json body `
           --template '{{.body}}'
 
-        if ("$release_pr_body" -match ([regex]::escape('/${{ github.repository }}/actions/runs/') + '(?<run_id>[0-9]+)')) {
+        if ($release_pr_body -match ([regex]::escape("/${env:INPUT_GITHUB_REPOSITORY}/actions/runs/") + '(?<run_id>[0-9]+)')) {
           $precedent_workflow_run_id = $Matches['run_id']
         }
         else {
@@ -263,8 +268,8 @@ jobs:
 
         # check working and package branch
         $ref_names = gh pr view `
-          ${{ inputs.pr_number_request_for_release }} `
-          --repo ${{ github.repository }} `
+          $env:INPUT_PR_NUMBER_REQUEST_FOR_RELEASE `
+          --repo $env:INPUT_GITHUB_REPOSITORY `
           --json baseRefName,headRefName `
           --template '{{.baseRefName}} {{.headRefName}}'
 
@@ -292,56 +297,71 @@ jobs:
     - name: Publish package ${{ steps.release-info.outputs.artifact_name_nupkg }} to nuget.org
       id: push-nuget-org
       if: ${{ !inputs.dry_run && env.NUGET_APIKEY != null && steps.release-info.outputs.artifact_name_nupkg != '' }}
+      shell: pwsh
       env:
         NUGET_APIKEY: ${{ secrets.token_push_nuget_org }}
         NUGET_SOURCE: 'https://api.nuget.org/v3/index.json'
+        INPUT_ARTIFACT_NAME_NUPKG: ${{ steps.release-info.outputs.artifact_name_nupkg }}
       run: |
-        dotnet nuget push \
-          --api-key $NUGET_APIKEY \
-          --source $NUGET_SOURCE \
-          '${{ steps.release-info.outputs.artifact_name_nupkg }}'
+        dotnet nuget push `
+          --api-key $env:NUGET_APIKEY `
+          --source $env:NUGET_SOURCE `
+          $env:INPUT_ARTIFACT_NAME_NUPKG
 
-        echo "pushed=true" >> $GITHUB_OUTPUT
+        "pushed=true" >> $Env:GITHUB_OUTPUT
 
-        echo "## :package: nuget.org" >> $GITHUB_STEP_SUMMARY
-        echo "The package '${{ steps.release-info.outputs.artifact_name_nupkg }}' was pushed to '$NUGET_SOURCE' successfully." >> $GITHUB_STEP_SUMMARY
+        "## :package: nuget.org" >> $Env:GITHUB_STEP_SUMMARY
+        "The package '${env:INPUT_ARTIFACT_NAME_NUPKG}' was pushed to '${env:NUGET_SOURCE}' successfully." >> $Env:GITHUB_STEP_SUMMARY
 
     - name: Publish package ${{ steps.release-info.outputs.artifact_name_nupkg }} to GitHub packages
       id: push-github-packages
       if: ${{ !inputs.dry_run && env.NUGET_APIKEY != null && steps.release-info.outputs.artifact_name_nupkg != '' }}
+      shell: pwsh
       env:
         NUGET_APIKEY: ${{ secrets.token_push_github_packages }}
-        NUGET_SOURCE: 'https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json'
+        INPUT_GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
+        INPUT_ARTIFACT_NAME_NUPKG: ${{ steps.release-info.outputs.artifact_name_nupkg }}
       run: |
-        dotnet nuget push \
-          --api-key $NUGET_APIKEY \
-          --source $NUGET_SOURCE \
-          '${{ steps.release-info.outputs.artifact_name_nupkg }}'
+        $NUGET_SOURCE = "https://nuget.pkg.github.com/${env:INPUT_GITHUB_REPOSITORY_OWNER}/index.json"
 
-        echo "pushed=true" >> $GITHUB_OUTPUT
+        dotnet nuget push `
+          --api-key $env:NUGET_APIKEY `
+          --source $NUGET_SOURCE `
+          $env:INPUT_ARTIFACT_NAME_NUPKG
 
-        echo "## :package: GitHub packages" >> $GITHUB_STEP_SUMMARY
-        echo "The package '${{ steps.release-info.outputs.artifact_name_nupkg }}' was pushed to '$NUGET_SOURCE' successfully." >> $GITHUB_STEP_SUMMARY
+        "pushed=true" >> $Env:GITHUB_OUTPUT
+
+        "## :package: GitHub packages" >> $Env:GITHUB_STEP_SUMMARY
+        "The package '${env:INPUT_ARTIFACT_NAME_NUPKG}' was pushed to '${NUGET_SOURCE}' successfully." >> $Env:GITHUB_STEP_SUMMARY
 
     - name: Delete package ${{ steps.release-info.outputs.artifact_name_nupkg }}
       if: ${{ steps.release-info.outputs.artifact_name_nupkg != '' }}
+      shell: pwsh
+      env:
+        INPUT_ARTIFACT_NAME_NUPKG: ${{ steps.release-info.outputs.artifact_name_nupkg }}
       run: |
-        rm -f ${{ steps.release-info.outputs.artifact_name_nupkg }}
+        rm -f $env:INPUT_ARTIFACT_NAME_NUPKG
 
     - name: Create release tag ${{ steps.release-info.outputs.release_tag }}
       shell: pwsh
       env:
         GH_TOKEN: ${{ secrets.token_repo }}
+        INPUT_DRY_RUN: ${{ inputs.dry_run == true }}
+        INPUT_RELEASE_TAG: ${{ steps.release-info.outputs.release_tag }}
+        INPUT_PACKAGE_BRANCH: ${{ steps.release-info.outputs.package_branch }}
+        INPUT_PACKAGE_ID_WITH_VERSION: ${{ steps.release-info.outputs.package_id_with_version }}
+        INPUT_PR_NUMBER_REQUEST_FOR_RELEASE: ${{ inputs.pr_number_request_for_release }}
+        INPUT_GITHUB_REPOSITORY: ${{ github.repository }}
       run: |
-        $dry_run = '${{ inputs.dry_run }}' -ieq 'true'
-        $tag_name = '${{ steps.release-info.outputs.release_tag }}'
-        $tag_message = '${{ steps.release-info.outputs.package_branch }}/${{ steps.release-info.outputs.package_id_with_version }}'
+        $dry_run = $env:INPUT_DRY_RUN -ieq 'true'
+        $tag_name = $env:INPUT_RELEASE_TAG
+        $tag_message = "${env:INPUT_PACKAGE_BRANCH}/${env:INPUT_PACKAGE_ID_WITH_VERSION}"
         $head_commit = git rev-parse HEAD
 
         # get merge commit for the release PR
         $target_commit = gh pr view `
-          ${{ inputs.pr_number_request_for_release }} `
-          --repo ${{ github.repository }} `
+          $env:INPUT_PR_NUMBER_REQUEST_FOR_RELEASE `
+          --repo $env:INPUT_GITHUB_REPOSITORY `
           --json mergeCommit `
           --template '{{.mergeCommit.oid}}'
 
@@ -375,11 +395,15 @@ jobs:
 
     - name: Delete release target tag ${{ steps.release-info.outputs.package_target_tag }}
       if: ${{ !inputs.dry_run }}
-      run: git push origin --delete '${{ steps.release-info.outputs.package_target_tag }}' || true
+      env:
+        INPUT_PACKAGE_TARGET_TAG: ${{ steps.release-info.outputs.package_target_tag }}
+      run: git push origin --delete "$INPUT_PACKAGE_TARGET_TAG" || true
 
     - name: Close release working branch ${{ steps.release-info.outputs.release_working_branch }}
       if: ${{ !inputs.dry_run }}
-      run: git push origin --delete '${{ steps.release-info.outputs.release_working_branch }}' || true
+      env:
+        INPUT_RELEASE_WORKING_BRANCH: ${{ steps.release-info.outputs.release_working_branch }}
+      run: git push origin --delete "$INPUT_RELEASE_WORKING_BRANCH" || true
 
   publish-release:
     name: Publish release for '${{ needs.publish-release-target.outputs.release_tag }}'
@@ -396,7 +420,7 @@ jobs:
       package_branch:               ${{ needs.publish-release-target.outputs.package_branch }}
       package_prevver_tag:          ${{ needs.publish-release-target.outputs.package_prevver_tag }}
       package_available_nuget_org:  ${{ needs.publish-release-target.outputs.package_available_nuget_org == 'true' || needs.publish-release-target.outputs.package_available_nuget_org == 'True' }}
-      dry_run:                      ${{ inputs.dry_run }}
+      dry_run:                      ${{ inputs.dry_run == true }}
     secrets:
       token_gist:                   ${{ secrets.token_repo }}
       token_new_release:            ${{ secrets.token_repo }}
