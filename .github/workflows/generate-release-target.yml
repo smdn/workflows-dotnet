@@ -148,7 +148,7 @@ jobs:
 
         $package_target_tag = $env:INPUT_RELEASE_TARGET_TAG_NAME
 
-        if ("$package_target_tag" -match "$pattern_target_tag") {
+        if ($package_target_tag -match $pattern_target_tag) {
           # split package info and version from tag name
           $package_branch = $Matches['branch']
           $package_id = $Matches['id']
@@ -168,7 +168,7 @@ jobs:
           $package_is_prerelease = $false
 
           if ($package_can_release) {
-            if ("$package_version" -match '\-[0-9a-zA-Z\.]+') {
+            if ($package_version -match '\-[0-9a-zA-Z\.]+') {
               $package_is_prerelease = $true
             }
           }
