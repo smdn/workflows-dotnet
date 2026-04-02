@@ -98,7 +98,7 @@ jobs:
 
     steps:
     - name: Prepare .NET SDK ${{ inputs.dotnet_sdk_version }}
-      uses: smdn/workflows-dotnet/actions/prepare-dotnet-sdk@actions/prepare-dotnet-sdk/v1.1.0
+      uses: smdn/workflows-dotnet/actions/prepare-dotnet-sdk@dad5cdaaa9533ca50f0b8bf2f451afae5c77f876 # actions/prepare-dotnet-sdk/v1.1.0
       with:
         minimal_dotnet_sdk_version: '${{ inputs.dotnet_sdk_version }}'
 
@@ -109,7 +109,7 @@ jobs:
         git config --global core.ignorecase false
 
     - name: Checkout repository
-      uses: actions/checkout@v6.0.0
+      uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
       with:
         # TODO: attempt treeless clone '--filter=tree:0'
         # ref: https://github.blog/2020-12-21-get-up-to-speed-with-partial-clone-and-shallow-clone/
@@ -285,7 +285,7 @@ jobs:
 
     - name: Setup NuGet cache
       # ref: https://github.com/actions/cache/blob/master/examples.md#c---nuget
-      uses: actions/cache@v5.0.4
+      uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
       env:
         SEGMENT_DOWNLOAD_TIMEOUT_MINS: 5
       with:
@@ -403,7 +403,7 @@ jobs:
 
     - name: Upload ${{ steps.pack.outputs.artifact_name_nupkg }}
       if: ${{ steps.package-info.outputs.package_can_release == 'True' }}
-      uses: actions/upload-artifact@v7.0.0
+      uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
       with:
         name: ${{ steps.pack.outputs.artifact_name_nupkg }}
         path: ${{ steps.pack.outputs.path_nupkg }}

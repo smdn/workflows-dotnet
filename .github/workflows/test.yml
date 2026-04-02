@@ -126,7 +126,7 @@ jobs:
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v6.0.0
+      uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
       with:
         token: ${{ secrets.token_repo }}
         fetch-depth: 1
@@ -274,7 +274,7 @@ jobs:
 
     steps:
     - name: Prepare .NET SDK ${{ inputs.dotnet_sdk_version }}
-      uses: smdn/workflows-dotnet/actions/prepare-dotnet-sdk@actions/prepare-dotnet-sdk/v1.1.0
+      uses: smdn/workflows-dotnet/actions/prepare-dotnet-sdk@dad5cdaaa9533ca50f0b8bf2f451afae5c77f876 # actions/prepare-dotnet-sdk/v1.1.0
       with:
         minimal_dotnet_sdk_version: '${{ inputs.dotnet_sdk_version }}'
 
@@ -285,7 +285,7 @@ jobs:
         git config --global core.ignorecase false
 
     - name: Checkout repository
-      uses: actions/checkout@v6.0.0
+      uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
       with:
         token: ${{ secrets.token_repo }}
         fetch-depth: 1
@@ -319,7 +319,7 @@ jobs:
 
     - name: Setup NuGet cache
       # ref: https://github.com/actions/cache/blob/master/examples.md#c---nuget
-      uses: actions/cache@v5.0.4
+      uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
       env:
         SEGMENT_DOWNLOAD_TIMEOUT_MINS: 5
       with:
