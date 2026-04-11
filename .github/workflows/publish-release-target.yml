@@ -324,6 +324,13 @@ jobs:
           # validate the downloaded nupkg file digest
           $digest_nupkg_actual = "sha256:" + $(Get-FileHash -Path $file_nupkg -Algorithm SHA256).Hash.ToLower()
 
+          "## :mag: .nupkg validation" >> $Env:GITHUB_STEP_SUMMARY
+          "" >> $Env:GITHUB_STEP_SUMMARY
+          "| nupkg | digest |" >> $Env:GITHUB_STEP_SUMMARY
+          "| ----- | ------ |" >> $Env:GITHUB_STEP_SUMMARY
+          "| Expected | ``${digest_nupkg_expected}`` |" >> $Env:GITHUB_STEP_SUMMARY
+          "| Actual | ``${digest_nupkg_actual}`` |" >> $Env:GITHUB_STEP_SUMMARY
+
           if ($digest_nupkg_actual -ne $digest_nupkg_expected) {
             "::error::The digest of the artifact does not match; expected '${digest_nupkg_expected}' but was '${digest_nupkg_actual}'.";
             exit 1;
