@@ -143,7 +143,7 @@ jobs:
           $env:INPUT_RELEASE_TARGET_TAG_PREFIX,
           '(?<branch>[A-Za-z0-9\.\-]+)/',
           '(?<id>[A-Za-z0-9\.]+)',
-          '(?<version>[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?([\-\+][0-9a-zA-Z\.]+)?)',
+          '(?<version>[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?([\-\+][0-9a-zA-Z\.\-]+)?)',
           '(?<suffix>[A-Za-z0-9]+)'
 
         $package_target_tag = $env:INPUT_RELEASE_TARGET_TAG_NAME
@@ -168,7 +168,7 @@ jobs:
           $package_is_prerelease = $false
 
           if ($package_can_release) {
-            if ($package_version -match '\-[0-9a-zA-Z\.]+') {
+            if ($package_version -match '\-[0-9a-zA-Z\.\-]+') {
               $package_is_prerelease = $true
             }
           }
