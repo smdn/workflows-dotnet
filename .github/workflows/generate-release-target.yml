@@ -411,6 +411,8 @@ jobs:
         name: ${{ steps.pack.outputs.artifact_name_nupkg }}
         path: ${{ steps.pack.outputs.path_nupkg }}
         retention-days: 1
+        archive: false
+        if-no-files-found: error
 
     - name: Generate .nuspec diff
       id: nuspec-diff
