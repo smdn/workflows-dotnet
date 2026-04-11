@@ -299,6 +299,7 @@ jobs:
       if: ${{ steps.release-info.outputs.artifact_name_nupkg != '' && steps.release-info.outputs.artifact_digest_nupkg != '' }}
       shell: pwsh
       env:
+        GH_TOKEN: ${{ secrets.token_repo }}
         INPUT_GITHUB_REPOSITORY: ${{ github.repository }}
         INPUT_ARTIFACT_NAME_NUPKG: ${{ steps.release-info.outputs.artifact_name_nupkg }}
         INPUT_ARTIFACT_DIGEST_NUPKG: ${{ steps.release-info.outputs.artifact_digest_nupkg }}
