@@ -384,8 +384,10 @@ jobs:
           ( Test-Path -Path $expected_nupkg  -PathType Leaf ) -and
           ( Test-Path -Path $expected_nuspec -PathType Leaf )
         ) {
+          $digest_nupkg = "sha256:" + $(Get-FileHash -Path $expected_nupkg -Algorithm SHA256).Hash.ToLower()
+
           "## :package: nupkg/nuspec" >> $Env:GITHUB_STEP_SUMMARY
-          "A package '${expected_nupkg}' was generated successfully." >> $Env:GITHUB_STEP_SUMMARY
+          "A package '${expected_nupkg}' (``${digest_nupkg}``) was generated successfully." >> $Env:GITHUB_STEP_SUMMARY
           "" >> $Env:GITHUB_STEP_SUMMARY
           '```xml' >> $Env:GITHUB_STEP_SUMMARY
           cat $expected_nuspec >> $Env:GITHUB_STEP_SUMMARY
@@ -393,6 +395,7 @@ jobs:
 
           # set outputs
           "artifact_name_nupkg=${file_nupkg}" >> $Env:GITHUB_OUTPUT
+          "artifact_digest_nupkg=${digest_nupkg}" >> $Env:GITHUB_OUTPUT
           "path_nupkg=${expected_nupkg}" >> $Env:GITHUB_OUTPUT
           "path_nuspec=${expected_nuspec}" >> $Env:GITHUB_OUTPUT
         }
@@ -675,6 +678,7 @@ jobs:
         INPUT_PACKAGE_IS_PRERELEASE: ${{ steps.package-info.outputs.package_is_prerelease }}
         INPUT_URL: ${{ steps.releasenote.outputs.url }}
         INPUT_ARTIFACT_NAME_NUPKG: ${{ steps.pack.outputs.artifact_name_nupkg }}
+        INPUT_ARTIFACT_DIGEST_NUPKG: ${{ steps.pack.outputs.artifact_digest_nupkg }}
         INPUT_CONTENTS: ${{ steps.extra-release-contents.outputs.contents }}
         INPUT_GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
         INPUT_RELEASE_TARGET_PR_LABEL: ${{ inputs.release_target_pr_label }}
@@ -726,6 +730,7 @@ jobs:
 
         if ( $env:INPUT_PACKAGE_CAN_RELEASE -ieq 'True' ) {
           [void]$pr_body.AppendLine("- artifact_name_nupkg: ``${env:INPUT_ARTIFACT_NAME_NUPKG}`` ❗Remove this line or change this value to empty to prevent publishing packages.")
+          [void]$pr_body.AppendLine("- artifact_digest_nupkg: ``${env:INPUT_ARTIFACT_DIGEST_NUPKG}``")
         }
 
         [void]$pr_body.AppendLine()

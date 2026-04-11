@@ -258,6 +258,7 @@ jobs:
         "precedent_workflow_run_id=${precedent_workflow_run_id}"    >> $Env:GITHUB_OUTPUT
 
         [string]$artifact_name_nupkg = $null
+        [string]$artifact_digest_nupkg = $null
 
         if ( $release_info_dict.TryGetValue( "artifact_name_nupkg", [ref] $artifact_name_nupkg ) ) {
           "| artifact_name_nupkg | ``${artifact_name_nupkg}`` |" >> $Env:GITHUB_STEP_SUMMARY
@@ -267,6 +268,12 @@ jobs:
         else {
           "" >> $Env:GITHUB_STEP_SUMMARY
           ":warning: No packages will be published." >> $Env:GITHUB_STEP_SUMMARY
+        }
+
+        if ( $release_info_dict.TryGetValue( "artifact_digest_nupkg", [ref] $artifact_digest_nupkg ) ) {
+          "| artifact_digest_nupkg | ``${artifact_digest_nupkg}`` |" >> $Env:GITHUB_STEP_SUMMARY
+
+          "artifact_digest_nupkg=${artifact_digest_nupkg}" >> $Env:GITHUB_OUTPUT
         }
 
         # check working and package branch
@@ -289,13 +296,42 @@ jobs:
         }
 
     - name: Download package ${{ steps.release-info.outputs.artifact_name_nupkg }}
-      if: ${{ !inputs.dry_run && steps.release-info.outputs.artifact_name_nupkg != '' }}
-      uses: dawidd6/action-download-artifact@8305c0f1062bb0d184d09ef4493ecb9288447732 # v20
-      with:
-        github_token: ${{ secrets.token_repo }}
-        workflow: generate-release-target.yml
-        run_id:  ${{ steps.release-info.outputs.precedent_workflow_run_id }}
-        name: ${{ steps.release-info.outputs.artifact_name_nupkg }}
+      if: ${{ steps.release-info.outputs.artifact_name_nupkg != '' && steps.release-info.outputs.artifact_digest_nupkg != '' }}
+      shell: pwsh
+      env:
+        INPUT_GITHUB_REPOSITORY: ${{ github.repository }}
+        INPUT_ARTIFACT_NAME_NUPKG: ${{ steps.release-info.outputs.artifact_name_nupkg }}
+        INPUT_ARTIFACT_DIGEST_NUPKG: ${{ steps.release-info.outputs.artifact_digest_nupkg }}
+        INPUT_PRECEDENT_WORKFLOW_RUN_ID: ${{ steps.release-info.outputs.precedent_workflow_run_id }}
+      run: |
+        $file_nupkg = $env:INPUT_ARTIFACT_NAME_NUPKG
+        $digest_nupkg_expected = $env:INPUT_ARTIFACT_DIGEST_NUPKG
+
+        # ref: https://cli.github.com/manual/gh_run_download
+        $run_download_options = @(
+          '--repo', $env:INPUT_GITHUB_REPOSITORY,
+          $env:INPUT_PRECEDENT_WORKFLOW_RUN_ID,
+          '--name', $env:INPUT_ARTIFACT_NAME_NUPKG,
+          '--dir', '.'
+        )
+
+        # download the nupkg file generated in the precedent workflow
+        "gh run download ${run_download_options}"
+        gh run download @run_download_options
+
+        if (Test-Path -Path $file_nupkg -PathType Leaf) {
+          # validate the downloaded nupkg file digest
+          $digest_nupkg_actual = "sha256:" + $(Get-FileHash -Path $file_nupkg -Algorithm SHA256).Hash.ToLower()
+
+          if ($digest_nupkg_actual -ne $digest_nupkg_expected) {
+            "::error::The digest of the artifact does not match; expected '${digest_nupkg_expected}' but was '${digest_nupkg_actual}'.";
+            exit 1;
+          }
+        }
+        else {
+          "::error::The artifact '${env:INPUT_ARTIFACT_NAME_NUPKG}' could not be downloaded.";
+          exit 1;
+        }
 
     - name: Publish package ${{ steps.release-info.outputs.artifact_name_nupkg }} to nuget.org
       id: push-nuget-org
