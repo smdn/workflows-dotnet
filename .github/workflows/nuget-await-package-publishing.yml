@@ -58,7 +58,7 @@ jobs:
         $pattern_release_tag = '^{0}{1}\-{2}$' -f
           $env:INPUT_RELEASE_TAG_PREFIX,
           '(?<id>[A-Za-z0-9\.]+)',
-          '(?<version>[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?([\-\+][0-9a-zA-Z\.]+)?)'
+          '(?<version>[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?([\-\+][0-9a-zA-Z\.\-]+)?)'
 
         if ($release_tag -match $pattern_release_tag) {
           # split package info and version from tag name
