@@ -411,8 +411,11 @@ jobs:
         name: ${{ steps.pack.outputs.artifact_name_nupkg }}
         path: ${{ steps.pack.outputs.path_nupkg }}
         retention-days: 1
-        archive: false
         if-no-files-found: error
+        # The `gh run download` command fails when downloading artifacts that are
+        # not archived, so for now, it is necessary to upload archived artifact.
+        # See: https://github.com/cli/cli/issues/13012
+        # archive: false
 
     - name: Generate .nuspec diff
       id: nuspec-diff
