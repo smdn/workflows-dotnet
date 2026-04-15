@@ -20,6 +20,8 @@ gh release create --generate-notes --draft --notes-start-tag release-note/v<prev
 gh release create --generate-notes --draft --notes-start-tag actions/prepare-dotnet-sdk/v<prev> actions/prepare-dotnet-sdk/vX.Y.Z
 ```
 
+このとき、一つのコミットに対して設定されるタグは一つまでとなるように注意する。　複数のタグが設定された状態になると、Dependabot Updateによるリリースバージョンで誤認識が生じうる。
+
 以下のようにdraftを編集するためのURLが提示されるので、開く。
 
 ```
