@@ -133,6 +133,7 @@ jobs:
 
     - name: Determine OS list which run the tests on
       id: runs-on-os-list
+      background: true
       shell: pwsh
       env:
         INPUT_VERBOSE: ${{ inputs.verbose == true }}
@@ -160,6 +161,7 @@ jobs:
 
     - name: Determine test projects
       id: test-projects
+      background: true
       shell: pwsh
       env:
         INPUT_VERBOSE: ${{ inputs.verbose == true }}
@@ -205,6 +207,7 @@ jobs:
 
     - name: Determine test configurations
       id: test-configurations
+      background: true
       shell: pwsh
       env:
         INPUT_PATH_GLOBAL_JSON: ${{ inputs.path_global_json }}
@@ -227,6 +230,9 @@ jobs:
         else {
           "runner=" >> $Env:GITHUB_OUTPUT
         }
+
+    - name: Wait for step outputs
+      wait-all:
 
   env-info:
     name: Environment information of ${{ matrix.os }}
@@ -274,6 +280,8 @@ jobs:
 
     steps:
     - name: Prepare .NET SDK ${{ inputs.dotnet_sdk_version }}
+      id: prepare-dotnet-sdk
+      background: true
       uses: smdn/workflows-dotnet/actions/prepare-dotnet-sdk@e294de483afffc1d3a366fbba853efe23c7b7d4c # actions/prepare-dotnet-sdk/v1.2.0
       with:
         minimal_dotnet_sdk_version: '${{ inputs.dotnet_sdk_version }}'
@@ -285,6 +293,8 @@ jobs:
         git config --global core.ignorecase false
 
     - name: Checkout repository
+      id: checkout-repository
+      background: true
       uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       with:
         token: ${{ secrets.token_repo }}
@@ -318,6 +328,8 @@ jobs:
         "cache-key-suffix=${cache_key_suffix}" >> $Env:GITHUB_OUTPUT
 
     - name: Setup NuGet cache
+      id: setup-nuget-cache
+      background: true
       # ref: https://github.com/actions/cache/blob/master/examples.md#c---nuget
       uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
       env:
@@ -326,6 +338,9 @@ jobs:
         path: ${{ steps.set-nuget-packages.outputs.path-to-nuget-packages }}
         key: test-NuGetPackages-${{ matrix.os }}-${{ steps.set-nuget-packages.outputs.cache-key-suffix }}
         restore-keys: test-NuGetPackages-${{ matrix.os }}
+
+    - name: Wait for prerequisite steps
+      wait: [prepare-dotnet-sdk, checkout-repository, setup-nuget-cache]
 
     - name: Restore dependencies of ${{ matrix.project.Name }}
       shell: pwsh
