@@ -1,5 +1,6 @@
 [![GitHub license](https://img.shields.io/github/license/smdn/workflows-dotnet)](https://github.com/smdn/workflows-dotnet/blob/main/LICENSE.txt)
 [![CodeQL](https://github.com/smdn/workflows-dotnet/actions/workflows/codeql-analysis.yml/badge.svg?branch=main)](https://github.com/smdn/workflows-dotnet/actions/workflows/codeql-analysis.yml)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/smdn/workflows-dotnet/badge)](https://scorecard.dev/viewer/?uri=github.com/smdn/workflows-dotnet)
 
 # workflows-dotnet
 This repository provides [GitHub Actions reusable workflows](./.github/workflows/) for .NET projects.
