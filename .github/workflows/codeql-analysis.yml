@@ -2,6 +2,8 @@
 # SPDX-FileCopyrightText: "2026 smdn <smdn@smdn.jp>"
 name: "CodeQL Analysis"
 
+permissions: {}
+
 on:
   push:
     branches: [ "main" ]
