@@ -5,8 +5,7 @@
 name: Publish release (reusable workflow)
 run-name: Publish release for '${{ inputs.release_tag }}'
 
-permissions:
-  contents: write
+permissions: {}
 
 on:
   workflow_call:
@@ -84,6 +83,8 @@ on:
 jobs:
   publish-release:
     runs-on: ${{ inputs.workflow_runs_on }}
+    permissions:
+      contents: write
 
     steps:
     - name: Create release note files for ${{ inputs.release_tag }}

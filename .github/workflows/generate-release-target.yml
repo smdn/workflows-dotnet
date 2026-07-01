@@ -6,9 +6,7 @@
 name: Generate release target (reusable workflow)
 run-name: Generate release target for ${{ inputs.release_target_tag_name }}
 
-permissions:
-  contents: write
-  pull-requests: write
+permissions: {}
 
 on:
   workflow_call:
@@ -94,6 +92,9 @@ env:
 jobs:
   generate-release-target:
     runs-on: ${{ inputs.workflow_runs_on }}
+    permissions:
+      contents: write
+      pull-requests: write
     if: startsWith(inputs.release_target_tag_name, inputs.release_target_tag_prefix)
 
     steps:
