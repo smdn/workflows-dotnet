@@ -4,7 +4,7 @@
 
 name: Run tests (reusable workflow)
 
-permissions: read-all
+permissions: {}
 
 # ref: https://docs.microsoft.com/en-us/dotnet/devops/dotnet-test-github-action
 on:
@@ -115,6 +115,8 @@ jobs:
   setup:
     name: Set up
     runs-on: ubuntu-slim
+    permissions:
+      contents: read
     timeout-minutes: 3
     outputs:
       runs-ons: ${{ steps.runs-on-os-list.outputs.runs-ons }}
@@ -267,6 +269,8 @@ jobs:
   run-tests:
     name: Test ${{ matrix.project.Name }} on ${{ matrix.os }}
     needs: [setup]
+    permissions:
+      contents: read
     timeout-minutes: ${{ fromJson(inputs.timeout_minutes_test_job) }}
     runs-on: ${{ matrix.os }}
     strategy:
