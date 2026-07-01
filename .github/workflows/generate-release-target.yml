@@ -99,6 +99,8 @@ jobs:
 
     steps:
     - name: Prepare .NET SDK ${{ inputs.dotnet_sdk_version }}
+      id: prepare-dotnet-sdk
+      background: true
       uses: smdn/workflows-dotnet/actions/prepare-dotnet-sdk@e294de483afffc1d3a366fbba853efe23c7b7d4c # actions/prepare-dotnet-sdk/v1.2.0
       with:
         minimal_dotnet_sdk_version: '${{ inputs.dotnet_sdk_version }}'
@@ -110,6 +112,8 @@ jobs:
         git config --global core.ignorecase false
 
     - name: Checkout repository
+      id: checkout-repository
+      background: true
       uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       with:
         # TODO: attempt treeless clone '--filter=tree:0'
@@ -118,15 +122,6 @@ jobs:
         ref: ${{ inputs.release_target_tag_name }}
         token: ${{ secrets.token_repo }}
         persist-credentials: true
-
-    - name: Configure git identity
-      run: |
-        git config user.name github-actions
-        git config user.email github-actions@github.com
-
-        # TODO
-        # git config user.name '${{ github.repository_owner }}'
-        # git config user.email '<>'
 
     - name: Determine the release target package information
       id: package-info
@@ -285,6 +280,8 @@ jobs:
         "cache-key-suffix=${cache_key_suffix}" >> $Env:GITHUB_OUTPUT
 
     - name: Setup NuGet cache
+      id: setup-nuget-cache
+      background: true
       # ref: https://github.com/actions/cache/blob/master/examples.md#c---nuget
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       env:
@@ -294,8 +291,23 @@ jobs:
         key: generate-release-NuGetPackages-${{ steps.set-nuget-packages.outputs.cache-key-suffix }}
         restore-keys: generate-release-NuGetPackages
 
+    - name: Wait for build prerequisite steps
+      wait: [prepare-dotnet-sdk, checkout-repository, setup-nuget-cache]
+
     - name: .NET info
       run: dotnet --info
+      background: true # run and forget
+
+    - name: Configure git identity
+      # Since this step must be performed within the Git directory,
+      # it must be done after the checkout.
+      run: |
+        git config user.name github-actions
+        git config user.email github-actions@github.com
+
+        # TODO
+        # git config user.name '${{ github.repository_owner }}'
+        # git config user.email '<>'
 
     - name: Restore dependencies of ${{ steps.package-info.outputs.package_id }}
       shell: pwsh
@@ -406,6 +418,7 @@ jobs:
         }
 
     - name: Upload ${{ steps.pack.outputs.artifact_name_nupkg }}
+      background: true # run and forget
       if: ${{ steps.package-info.outputs.package_can_release == 'True' }}
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
@@ -848,31 +861,32 @@ jobs:
 
         exit 0
 
-    - name: Dispose pull request
-      continue-on-error: true
-      if: inputs.dry_run != 'true' && (failure() || cancelled()) && steps.pullrequest.outputs.url != ''
-      shell: pwsh
-      env:
-        GH_TOKEN: ${{ secrets.token_pullrequest }}
-        INPUT_PULLREQUEST_URL: ${{ steps.pullrequest.outputs.url }}
-      run: |
-        gh pr close $env:INPUT_PULLREQUEST_URL --delete-branch --comment 'This release target was cancelled or failed.'
+    - parallel:
+      - name: Dispose pull request
+        continue-on-error: true
+        if: inputs.dry_run != 'true' && (failure() || cancelled()) && steps.pullrequest.outputs.url != ''
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.token_pullrequest }}
+          INPUT_PULLREQUEST_URL: ${{ steps.pullrequest.outputs.url }}
+        run: |
+          gh pr close $env:INPUT_PULLREQUEST_URL --delete-branch --comment 'This release target was cancelled or failed.'
 
-    - name: Dispose release working branch
-      continue-on-error: true
-      if: inputs.dry_run != 'true' && (failure() || cancelled())
-      shell: pwsh
-      env:
-        INPUT_WORKING_BRANCH: ${{ steps.release-info.outputs.working_branch }}
-      run: |
-        git push origin ":${env:INPUT_WORKING_BRANCH}"
+      - name: Dispose release working branch
+        continue-on-error: true
+        if: inputs.dry_run != 'true' && (failure() || cancelled())
+        shell: pwsh
+        env:
+          INPUT_WORKING_BRANCH: ${{ steps.release-info.outputs.working_branch }}
+        run: |
+          git push origin ":${env:INPUT_WORKING_BRANCH}"
 
-    - name: Dispose release note
-      continue-on-error: true
-      if: inputs.dry_run != 'true' && (failure() || cancelled()) && steps.releasenote.outputs.url != ''
-      shell: pwsh
-      env:
-        GH_TOKEN: ${{ secrets.token_gist }}
-        INPUT_RELEASENOTE_URL: ${{ steps.releasenote.outputs.url }}
-      run: |
-        gh gist delete $env:INPUT_RELEASENOTE_URL
+      - name: Dispose release note
+        continue-on-error: true
+        if: inputs.dry_run != 'true' && (failure() || cancelled()) && steps.releasenote.outputs.url != ''
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.token_gist }}
+          INPUT_RELEASENOTE_URL: ${{ steps.releasenote.outputs.url }}
+        run: |
+          gh gist delete $env:INPUT_RELEASENOTE_URL

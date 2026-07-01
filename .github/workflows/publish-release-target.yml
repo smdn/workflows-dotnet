@@ -77,6 +77,8 @@ jobs:
 
     steps:
     - name: Prepare .NET SDK ${{ inputs.dotnet_sdk_version }}
+      id: prepare-dotnet-sdk
+      background: true
       uses: smdn/workflows-dotnet/actions/prepare-dotnet-sdk@e294de483afffc1d3a366fbba853efe23c7b7d4c # actions/prepare-dotnet-sdk/v1.2.0
       with:
         minimal_dotnet_sdk_version: '${{ inputs.dotnet_sdk_version }}'
@@ -88,20 +90,13 @@ jobs:
         git config --global core.ignorecase false
 
     - name: Checkout repository
+      id: checkout-repository
+      background: true
       # note: checkout repository firstly due to working directory will be cleaned up on checkout
       uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       with:
         token: ${{ secrets.token_repo }}
         persist-credentials: true
-
-    - name: Configure git identity
-      run: |
-        git config user.name github-actions
-        git config user.email github-actions@github.com
-
-        # TODO
-        # git config user.name '${{ github.repository_owner }}'
-        # git config user.email '<>'
 
     - name: Check pull request labels
       if: ${{ inputs.pr_label_request_for_release != '' }}
@@ -132,6 +127,7 @@ jobs:
 
     - name: Determine release target information
       id: release-info
+      background: true
       env:
         GH_TOKEN: ${{ secrets.token_repo }}
         INPUT_PR_NUMBER_REQUEST_FOR_RELEASE: ${{ inputs.pr_number_request_for_release }}
@@ -295,6 +291,8 @@ jobs:
         }
 
     - name: Download package ${{ steps.release-info.outputs.artifact_name_nupkg }}
+      id: download-package
+      background: true
       if: ${{ steps.release-info.outputs.artifact_name_nupkg != '' && steps.release-info.outputs.artifact_digest_nupkg != '' }}
       shell: pwsh
       env:
@@ -340,8 +338,23 @@ jobs:
           exit 1;
         }
 
+    - name: Wait for publish prerequisite steps
+      wait: [prepare-dotnet-sdk, checkout-repository, release-info, download-package]
+
+    - name: Configure git identity
+      # Since this step must be performed within the Git directory,
+      # it must be done after the checkout.
+      run: |
+        git config user.name github-actions
+        git config user.email github-actions@github.com
+
+        # TODO
+        # git config user.name '${{ github.repository_owner }}'
+        # git config user.email '<>'
+
     - name: Publish package ${{ steps.release-info.outputs.artifact_name_nupkg }} to nuget.org
       id: push-nuget-org
+      background: true
       if: ${{ !inputs.dry_run && env.NUGET_APIKEY != null && steps.release-info.outputs.artifact_name_nupkg != '' }}
       shell: pwsh
       env:
@@ -361,6 +374,7 @@ jobs:
 
     - name: Publish package ${{ steps.release-info.outputs.artifact_name_nupkg }} to GitHub packages
       id: push-github-packages
+      background: true
       if: ${{ !inputs.dry_run && env.NUGET_APIKEY != null && steps.release-info.outputs.artifact_name_nupkg != '' }}
       shell: pwsh
       env:
@@ -379,6 +393,9 @@ jobs:
 
         "## :package: GitHub packages" >> $Env:GITHUB_STEP_SUMMARY
         "The package '${env:INPUT_ARTIFACT_NAME_NUPKG}' was pushed to '${NUGET_SOURCE}' successfully." >> $Env:GITHUB_STEP_SUMMARY
+
+    - name: Wait for pushing packages
+      wait: [push-nuget-org, push-github-packages]
 
     - name: Delete package ${{ steps.release-info.outputs.artifact_name_nupkg }}
       if: ${{ steps.release-info.outputs.artifact_name_nupkg != '' }}
@@ -439,17 +456,18 @@ jobs:
           git push origin $tag_name
         }
 
-    - name: Delete release target tag ${{ steps.release-info.outputs.package_target_tag }}
-      if: ${{ !inputs.dry_run }}
-      env:
-        INPUT_PACKAGE_TARGET_TAG: ${{ steps.release-info.outputs.package_target_tag }}
-      run: git push origin --delete "$INPUT_PACKAGE_TARGET_TAG" || true
+    - parallel:
+      - name: Delete release target tag ${{ steps.release-info.outputs.package_target_tag }}
+        if: ${{ !inputs.dry_run }}
+        env:
+          INPUT_PACKAGE_TARGET_TAG: ${{ steps.release-info.outputs.package_target_tag }}
+        run: git push origin --delete "$INPUT_PACKAGE_TARGET_TAG" || true
 
-    - name: Close release working branch ${{ steps.release-info.outputs.release_working_branch }}
-      if: ${{ !inputs.dry_run }}
-      env:
-        INPUT_RELEASE_WORKING_BRANCH: ${{ steps.release-info.outputs.release_working_branch }}
-      run: git push origin --delete "$INPUT_RELEASE_WORKING_BRANCH" || true
+      - name: Close release working branch ${{ steps.release-info.outputs.release_working_branch }}
+        if: ${{ !inputs.dry_run }}
+        env:
+          INPUT_RELEASE_WORKING_BRANCH: ${{ steps.release-info.outputs.release_working_branch }}
+        run: git push origin --delete "$INPUT_RELEASE_WORKING_BRANCH" || true
 
   publish-release:
     name: Publish release for '${{ needs.publish-release-target.outputs.release_tag }}'
