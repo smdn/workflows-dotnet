@@ -282,12 +282,21 @@ jobs:
           - ${{ fromJson(needs.setup.outputs.test-projects) }}
 
     steps:
-    - name: Prepare .NET SDK ${{ inputs.dotnet_sdk_version }}
+    - name: &prepare-dotnet-sdk-name Prepare .NET SDK ${{ inputs.dotnet_sdk_version }}
       id: prepare-dotnet-sdk
+      if: runner.os != 'Windows'
       background: true
-      uses: smdn/workflows-dotnet/actions/prepare-dotnet-sdk@e294de483afffc1d3a366fbba853efe23c7b7d4c # actions/prepare-dotnet-sdk/v1.2.0
-      with:
+      uses: &prepare-dotnet-sdk-action smdn/workflows-dotnet/actions/prepare-dotnet-sdk@e294de483afffc1d3a366fbba853efe23c7b7d4c # actions/prepare-dotnet-sdk/v1.2.0
+      with: &prepare-dotnet-sdk-action-params
         minimal_dotnet_sdk_version: '${{ inputs.dotnet_sdk_version }}'
+
+    - name: *prepare-dotnet-sdk-name
+      id: prepare-dotnet-sdk-non-background
+      # Workaround: Run synchronously on Windows to avoid OS-specific file locking conflicts (sharing violations).
+      # Since 'background' does not accept expressions (${{ ... }}), YAML anchors are used to reuse configurations across split steps.
+      if: runner.os == 'Windows'
+      uses: *prepare-dotnet-sdk-action
+      with: *prepare-dotnet-sdk-action-params
 
     - name: Configure git
       run: |
@@ -295,13 +304,22 @@ jobs:
         git config --global core.safecrlf true
         git config --global core.ignorecase false
 
-    - name: Checkout repository
+    - name: &checkout-repository-name Checkout repository
       id: checkout-repository
+      if: runner.os != 'Windows'
       background: true
-      uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      with:
+      uses: &checkout-repository-action actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      with: &checkout-repository-action-params
         token: ${{ secrets.token_repo }}
         fetch-depth: 1
+
+    - name: *checkout-repository-name
+      id: checkout-repository-non-background
+      # Workaround: Run synchronously on Windows to avoid OS-specific file locking conflicts (sharing violations).
+      # Since 'background' does not accept expressions (${{ ... }}), YAML anchors are used to reuse configurations across split steps.
+      if: runner.os == 'Windows'
+      uses: *checkout-repository-action
+      with: *checkout-repository-action-params
 
     - name: Set NUGET_PACKAGES
       id: set-nuget-packages
@@ -330,17 +348,27 @@ jobs:
         "path-to-nuget-packages=${path_to_nuget_packages}" >> $Env:GITHUB_OUTPUT
         "cache-key-suffix=${cache_key_suffix}" >> $Env:GITHUB_OUTPUT
 
-    - name: Setup NuGet cache
+    - name: &setup-nuget-cache-name Setup NuGet cache
       id: setup-nuget-cache
+      if: runner.os != 'Windows'
       background: true
       # ref: https://github.com/actions/cache/blob/master/examples.md#c---nuget
-      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-      env:
+      uses: &setup-nuget-cache-action actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      env: &setup-nuget-cache-envvars
         SEGMENT_DOWNLOAD_TIMEOUT_MINS: 5
-      with:
+      with: &setup-nuget-cache-action-params
         path: ${{ steps.set-nuget-packages.outputs.path-to-nuget-packages }}
         key: test-NuGetPackages-${{ matrix.os }}-${{ steps.set-nuget-packages.outputs.cache-key-suffix }}
         restore-keys: test-NuGetPackages-${{ matrix.os }}
+
+    - name: *setup-nuget-cache-name
+      id: setup-nuget-cache-non-background
+      # Workaround: Run synchronously on Windows to avoid OS-specific file locking conflicts (sharing violations).
+      # Since 'background' does not accept expressions (${{ ... }}), YAML anchors are used to reuse configurations across split steps.
+      if: runner.os == 'Windows'
+      uses: *setup-nuget-cache-action
+      env: *setup-nuget-cache-envvars
+      with: *setup-nuget-cache-action-params
 
     - name: Wait for prerequisite steps
       wait: [prepare-dotnet-sdk, checkout-repository, setup-nuget-cache]
