@@ -286,7 +286,10 @@ jobs:
       id: prepare-dotnet-sdk
       if: runner.os != 'Windows'
       background: true
-      uses: &prepare-dotnet-sdk-action smdn/workflows-dotnet/actions/prepare-dotnet-sdk@e294de483afffc1d3a366fbba853efe23c7b7d4c # actions/prepare-dotnet-sdk/v1.2.0
+      # Since `scorecard-action` seems unable to properly process YAML anchors and aliases, expand `uses` for now.
+      # See https://github.com/ossf/scorecard-action/issues/1677
+      #uses: &prepare-dotnet-sdk-action smdn/workflows-dotnet/actions/prepare-dotnet-sdk@e294de483afffc1d3a366fbba853efe23c7b7d4c # actions/prepare-dotnet-sdk/v1.2.0
+      uses: smdn/workflows-dotnet/actions/prepare-dotnet-sdk@e294de483afffc1d3a366fbba853efe23c7b7d4c # actions/prepare-dotnet-sdk/v1.2.0
       with: &prepare-dotnet-sdk-action-params
         minimal_dotnet_sdk_version: '${{ inputs.dotnet_sdk_version }}'
 
@@ -295,7 +298,10 @@ jobs:
       # Workaround: Run synchronously on Windows to avoid OS-specific file locking conflicts (sharing violations).
       # Since 'background' does not accept expressions (${{ ... }}), YAML anchors are used to reuse configurations across split steps.
       if: runner.os == 'Windows'
-      uses: *prepare-dotnet-sdk-action
+      # Since `scorecard-action` seems unable to properly process YAML anchors and aliases, expand `uses` for now.
+      # See https://github.com/ossf/scorecard-action/issues/1677
+      #uses: *prepare-dotnet-sdk-action
+      uses: smdn/workflows-dotnet/actions/prepare-dotnet-sdk@e294de483afffc1d3a366fbba853efe23c7b7d4c # actions/prepare-dotnet-sdk/v1.2.0
       with: *prepare-dotnet-sdk-action-params
 
     - name: Configure git
@@ -308,7 +314,10 @@ jobs:
       id: checkout-repository
       if: runner.os != 'Windows'
       background: true
-      uses: &checkout-repository-action actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      # Since `scorecard-action` seems unable to properly process YAML anchors and aliases, expand `uses` for now.
+      # See https://github.com/ossf/scorecard-action/issues/1677
+      #uses: &checkout-repository-action actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       with: &checkout-repository-action-params
         token: ${{ secrets.token_repo }}
         fetch-depth: 1
@@ -318,7 +327,10 @@ jobs:
       # Workaround: Run synchronously on Windows to avoid OS-specific file locking conflicts (sharing violations).
       # Since 'background' does not accept expressions (${{ ... }}), YAML anchors are used to reuse configurations across split steps.
       if: runner.os == 'Windows'
-      uses: *checkout-repository-action
+      # Since `scorecard-action` seems unable to properly process YAML anchors and aliases, expand `uses` for now.
+      # See https://github.com/ossf/scorecard-action/issues/1677
+      #uses: *checkout-repository-action
+      uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       with: *checkout-repository-action-params
 
     - name: Set NUGET_PACKAGES
@@ -353,7 +365,10 @@ jobs:
       if: runner.os != 'Windows'
       background: true
       # ref: https://github.com/actions/cache/blob/master/examples.md#c---nuget
-      uses: &setup-nuget-cache-action actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      # Since `scorecard-action` seems unable to properly process YAML anchors and aliases, expand `uses` for now.
+      # See https://github.com/ossf/scorecard-action/issues/1677
+      #uses: &setup-nuget-cache-action actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       env: &setup-nuget-cache-envvars
         SEGMENT_DOWNLOAD_TIMEOUT_MINS: 5
       with: &setup-nuget-cache-action-params
@@ -366,7 +381,10 @@ jobs:
       # Workaround: Run synchronously on Windows to avoid OS-specific file locking conflicts (sharing violations).
       # Since 'background' does not accept expressions (${{ ... }}), YAML anchors are used to reuse configurations across split steps.
       if: runner.os == 'Windows'
-      uses: *setup-nuget-cache-action
+      # Since `scorecard-action` seems unable to properly process YAML anchors and aliases, expand `uses` for now.
+      # See https://github.com/ossf/scorecard-action/issues/1677
+      #uses: *setup-nuget-cache-action
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       env: *setup-nuget-cache-envvars
       with: *setup-nuget-cache-action-params
 
