@@ -292,6 +292,9 @@ jobs:
           exit 1
         }
 
+    - name: Wait for publish prerequisite steps
+      wait: [prepare-dotnet-sdk, checkout-repository, release-info]
+
     - name: Download package ${{ steps.release-info.outputs.artifact_name_nupkg }}
       id: download-package
       background: true
@@ -339,9 +342,6 @@ jobs:
           "::error::The artifact '${env:INPUT_ARTIFACT_NAME_NUPKG}' could not be downloaded.";
           exit 1;
         }
-
-    - name: Wait for publish prerequisite steps
-      wait: [prepare-dotnet-sdk, checkout-repository, release-info, download-package]
 
     - name: Configure git identity
       # Since this step must be performed within the Git directory,
