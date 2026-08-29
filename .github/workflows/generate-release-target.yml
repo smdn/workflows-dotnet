@@ -56,7 +56,7 @@ on:
         description: "The minimum .NET SDK version which is used to generate the release target."
         required: false
         type: string
-        default: '8.0.100'
+        default: '10.0.100'
 
       use_project_assets_sdk:
         description: "If true, enables processing that uses project assets importing as MSBuild Project SDK."
