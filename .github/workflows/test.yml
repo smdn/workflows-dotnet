@@ -288,8 +288,8 @@ jobs:
       background: true
       # Since `scorecard-action` seems unable to properly process YAML anchors and aliases, expand `uses` for now.
       # See https://github.com/ossf/scorecard-action/issues/1677
-      #uses: &prepare-dotnet-sdk-action smdn/workflows-dotnet/actions/prepare-dotnet-sdk@e294de483afffc1d3a366fbba853efe23c7b7d4c # actions/prepare-dotnet-sdk/v1.2.0
-      uses: smdn/workflows-dotnet/actions/prepare-dotnet-sdk@e294de483afffc1d3a366fbba853efe23c7b7d4c # actions/prepare-dotnet-sdk/v1.2.0
+      #uses: &prepare-dotnet-sdk-action smdn/workflows-dotnet/actions/prepare-dotnet-sdk@949cc1db4b8c1ed5e7beea5d96faf9a72718a956 # actions/prepare-dotnet-sdk/v1.2.1
+      uses: smdn/workflows-dotnet/actions/prepare-dotnet-sdk@949cc1db4b8c1ed5e7beea5d96faf9a72718a956 # actions/prepare-dotnet-sdk/v1.2.1
       with: &prepare-dotnet-sdk-action-params
         minimal_dotnet_sdk_version: '${{ inputs.dotnet_sdk_version }}'
 
@@ -301,7 +301,7 @@ jobs:
       # Since `scorecard-action` seems unable to properly process YAML anchors and aliases, expand `uses` for now.
       # See https://github.com/ossf/scorecard-action/issues/1677
       #uses: *prepare-dotnet-sdk-action
-      uses: smdn/workflows-dotnet/actions/prepare-dotnet-sdk@e294de483afffc1d3a366fbba853efe23c7b7d4c # actions/prepare-dotnet-sdk/v1.2.0
+      uses: smdn/workflows-dotnet/actions/prepare-dotnet-sdk@949cc1db4b8c1ed5e7beea5d96faf9a72718a956 # actions/prepare-dotnet-sdk/v1.2.1
       with: *prepare-dotnet-sdk-action-params
 
     - name: Configure git

@@ -101,7 +101,7 @@ jobs:
     - name: Prepare .NET SDK ${{ inputs.dotnet_sdk_version }}
       id: prepare-dotnet-sdk
       background: true
-      uses: smdn/workflows-dotnet/actions/prepare-dotnet-sdk@e294de483afffc1d3a366fbba853efe23c7b7d4c # actions/prepare-dotnet-sdk/v1.2.0
+      uses: smdn/workflows-dotnet/actions/prepare-dotnet-sdk@949cc1db4b8c1ed5e7beea5d96faf9a72718a956 # actions/prepare-dotnet-sdk/v1.2.1
       with:
         minimal_dotnet_sdk_version: '${{ inputs.dotnet_sdk_version }}'
 
