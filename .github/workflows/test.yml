@@ -131,6 +131,7 @@ jobs:
       with:
         token: ${{ secrets.token_repo }}
         fetch-depth: 1
+        persist-credentials: false
 
     - name: Determine OS list which run the tests on
       id: runs-on-os-list
@@ -321,6 +322,7 @@ jobs:
       with: &checkout-repository-action-params
         token: ${{ secrets.token_repo }}
         fetch-depth: 1
+        persist-credentials: false
 
     - name: *checkout-repository-name
       id: checkout-repository-non-background
