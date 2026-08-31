@@ -367,6 +367,7 @@ jobs:
         dotnet nuget push `
           --api-key $env:NUGET_APIKEY `
           --source $env:NUGET_SOURCE `
+          --skip-duplicate `
           $env:INPUT_ARTIFACT_NAME_NUPKG
 
         "pushed=true" >> $Env:GITHUB_OUTPUT
@@ -389,6 +390,7 @@ jobs:
         dotnet nuget push `
           --api-key $env:NUGET_APIKEY `
           --source $NUGET_SOURCE `
+          --skip-duplicate `
           $env:INPUT_ARTIFACT_NAME_NUPKG
 
         "pushed=true" >> $Env:GITHUB_OUTPUT
