@@ -93,7 +93,6 @@ jobs:
 
     - name: Checkout repository
       id: checkout-repository
-      background: true
       # note: checkout repository firstly due to working directory will be cleaned up on checkout
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       with:
@@ -129,6 +128,7 @@ jobs:
 
     - name: Determine release target information
       id: release-info
+      # needs: steps.checkout-repository
       background: true
       env:
         GH_TOKEN: ${{ secrets.token_repo }}
@@ -293,11 +293,10 @@ jobs:
         }
 
     - name: Wait for publish prerequisite steps
-      wait: [prepare-dotnet-sdk, checkout-repository, release-info]
+      wait: [prepare-dotnet-sdk, release-info]
 
     - name: Download package ${{ steps.release-info.outputs.artifact_name_nupkg }}
       id: download-package
-      background: true
       if: ${{ steps.release-info.outputs.artifact_name_nupkg != '' && steps.release-info.outputs.artifact_digest_nupkg != '' }}
       shell: pwsh
       env:
@@ -344,6 +343,7 @@ jobs:
         }
 
     - name: Configure git identity
+      # needs: steps.checkout-repository
       # Since this step must be performed within the Git directory,
       # it must be done after the checkout.
       run: |

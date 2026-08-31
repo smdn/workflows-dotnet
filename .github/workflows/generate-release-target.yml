@@ -105,6 +105,42 @@ jobs:
       with:
         minimal_dotnet_sdk_version: '${{ inputs.dotnet_sdk_version }}'
 
+    - name: Set NUGET_PACKAGES
+      id: set-nuget-packages
+      shell: pwsh
+      env:
+        INPUT_GITHUB_WORKSPACE: ${{ github.workspace }}
+      run: |
+        $path_to_nuget_packages =[System.IO.Path]::Combine(
+          $env:INPUT_GITHUB_WORKSPACE,
+          '.nuget',
+          'packages'
+        )
+
+        "::debug::NUGET_PACKAGES=${path_to_nuget_packages}"
+
+        $cache_key_suffix = [System.String]::Concat(
+          $([System.Globalization.ISOWeek]::GetYear([System.DateTime]::Now)),
+          '-W',
+          $([System.Globalization.ISOWeek]::GetWeekOfYear([System.DateTime]::Now))
+        )
+
+        "NUGET_PACKAGES=${path_to_nuget_packages}" >> $Env:GITHUB_ENV
+        "path-to-nuget-packages=${path_to_nuget_packages}" >> $Env:GITHUB_OUTPUT
+        "cache-key-suffix=${cache_key_suffix}" >> $Env:GITHUB_OUTPUT
+
+    - name: Setup NuGet cache
+      id: setup-nuget-cache
+      background: true
+      # ref: https://github.com/actions/cache/blob/master/examples.md#c---nuget
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      env:
+        SEGMENT_DOWNLOAD_TIMEOUT_MINS: 5
+      with:
+        path: ${{ steps.set-nuget-packages.outputs.path-to-nuget-packages }}
+        key: generate-release-NuGetPackages-${{ steps.set-nuget-packages.outputs.cache-key-suffix }}
+        restore-keys: generate-release-NuGetPackages
+
     - name: Configure git
       run: |
         git config --global core.autocrlf input
@@ -113,7 +149,6 @@ jobs:
 
     - name: Checkout repository
       id: checkout-repository
-      background: true
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       with:
         # TODO: attempt treeless clone '--filter=tree:0'
@@ -125,15 +160,16 @@ jobs:
 
     - name: Determine the release target package information
       id: package-info
-      # note: Parse and determines parse package info from the triggered tag name.
-      # note: The tag name must be in format of '<prefix>/<branch>/Package.ID-1.2.3-prerelease'.
-      # note: The tag that ends with '-unreleased' will be treated as an unreleasable target where nupkg will not be uploaded.
+      # needs: steps.checkout-repository
       shell: pwsh
       env:
         INPUT_RELEASE_TARGET_TAG_PREFIX: ${{ inputs.release_target_tag_prefix }}
         INPUT_RELEASE_TARGET_TAG_NAME: ${{ inputs.release_target_tag_name }}
         INPUT_PATH_PREFIX_SOURCE: ${{ inputs.path_prefix_source }}
         INPUT_RELEASE_TAG_PREFIX: ${{ inputs.release_tag_prefix }}
+      # note: Parse and determines parse package info from the triggered tag name.
+      # note: The tag name must be in format of '<prefix>/<branch>/Package.ID-1.2.3-prerelease'.
+      # note: The tag that ends with '-unreleased' will be treated as an unreleasable target where nupkg will not be uploaded.
       run: |
         $pattern_target_tag = '^{0}{1}{2}\-{3}(\-{4})?$' -f
           $env:INPUT_RELEASE_TARGET_TAG_PREFIX,
@@ -246,6 +282,7 @@ jobs:
         "working_branch=${release_working_branch}" >> $Env:GITHUB_OUTPUT
 
     - name: Prepare for updating API list of ${{ steps.package-info.outputs.package_id }}
+      # needs: steps.checkout-repository
       shell: pwsh
       env:
         INPUT_PATH_PREFIX_APILIST: ${{ inputs.path_prefix_apilist }}
@@ -255,50 +292,15 @@ jobs:
         # this must be done before the generation of new API list, i.e. before running the target 'Build' or 'Pack'.
         git rm --ignore-unmatch "${env:INPUT_PATH_PREFIX_APILIST}${env:INPUT_PACKAGE_ID}/*.apilist.cs"
 
-    - name: Set NUGET_PACKAGES
-      id: set-nuget-packages
-      shell: pwsh
-      env:
-        INPUT_GITHUB_WORKSPACE: ${{ github.workspace }}
-      run: |
-        $path_to_nuget_packages =[System.IO.Path]::Combine(
-          $env:INPUT_GITHUB_WORKSPACE,
-          '.nuget',
-          'packages'
-        )
-
-        "::debug::NUGET_PACKAGES=${path_to_nuget_packages}"
-
-        $cache_key_suffix = [System.String]::Concat(
-          $([System.Globalization.ISOWeek]::GetYear([System.DateTime]::Now)),
-          '-W',
-          $([System.Globalization.ISOWeek]::GetWeekOfYear([System.DateTime]::Now))
-        )
-
-        "NUGET_PACKAGES=${path_to_nuget_packages}" >> $Env:GITHUB_ENV
-        "path-to-nuget-packages=${path_to_nuget_packages}" >> $Env:GITHUB_OUTPUT
-        "cache-key-suffix=${cache_key_suffix}" >> $Env:GITHUB_OUTPUT
-
-    - name: Setup NuGet cache
-      id: setup-nuget-cache
-      background: true
-      # ref: https://github.com/actions/cache/blob/master/examples.md#c---nuget
-      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-      env:
-        SEGMENT_DOWNLOAD_TIMEOUT_MINS: 5
-      with:
-        path: ${{ steps.set-nuget-packages.outputs.path-to-nuget-packages }}
-        key: generate-release-NuGetPackages-${{ steps.set-nuget-packages.outputs.cache-key-suffix }}
-        restore-keys: generate-release-NuGetPackages
-
     - name: Wait for build prerequisite steps
-      wait: [prepare-dotnet-sdk, checkout-repository, setup-nuget-cache]
+      wait: [prepare-dotnet-sdk, setup-nuget-cache]
 
     - name: .NET info
       run: dotnet --info
       background: true # run and forget
 
     - name: Configure git identity
+      # needs: steps.checkout-repository
       # Since this step must be performed within the Git directory,
       # it must be done after the checkout.
       run: |
