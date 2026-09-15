@@ -6,6 +6,8 @@ description: >
   A composite action that prepares minimum required version of .NET SDK.
   Before installation, it checks whether the minimum required version is already installed or not.
   The installation is performed only when the specified version is not installed.
+  Even if the required minimum version is already installed, this action runs
+  `actions/setup-dotnet` to enable the C# compiler problem matcher.
 
 inputs:
   minimal_dotnet_sdk_version:
@@ -47,7 +49,35 @@ runs:
 
     - name: Install .NET SDK ${{ steps.check-dotnet-sdk-version.outputs.required-version }}
       id: install-dotnet-sdk
-      if: ${{ steps.check-dotnet-sdk-version.outputs.required-version != '' }}
+      if: ${{ steps.check-dotnet-sdk-version.outputs.required-version != '' }} # if specified version is not installed
       uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
       with:
         dotnet-version: "${{ steps.check-dotnet-sdk-version.outputs.required-version }}"
+
+    - name: Register C# compiler problem matcher
+      id: register-problem-matcher
+      if: ${{ steps.check-dotnet-sdk-version.outputs.required-version == '' }} # if specified version is available
+      shell: pwsh
+      run: |
+        # This step reuses the csc.json file downloaded as part of the
+        # `actions/setup-dotnet` action repository.
+
+        # NOTE: Accessing the '_actions' directory relies on the internal path structure of
+        # the GitHub Actions runner, which is not guaranteed to be fixed or stable in
+        # future runner updates.
+        $actionsDir = Join-Path $env:RUNNER_WORKSPACE "../_actions"
+
+        # Find the downloaded `actions/setup-dotnet` directory
+        $setupDotnetDir = Get-ChildItem -Path (Join-Path $actionsDir "actions/setup-dotnet") -Directory -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
+
+        # NOTE: Hardcoding the path to '.github/csc.json' depends on the internal
+        # directory structure of the `actions/setup-dotnet` repository, which is not
+        # guaranteed to remain fixed or stable in future versions.
+        $cscJsonPath = if ($setupDotnetDir) { Join-Path $setupDotnetDir ".github/csc.json" } else { $null }
+
+        if ($cscJsonPath -and (Test-Path $cscJsonPath)) {
+          Write-Host "::add-matcher::$cscJsonPath"
+        }
+        else {
+          Write-Host "::warning::csc.json was not found in downloaded `setup-dotnet` action."
+        }
