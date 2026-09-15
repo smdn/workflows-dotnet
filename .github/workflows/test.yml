@@ -21,7 +21,7 @@ on:
         type: string
 
       dotnet_sdk_version:
-        description: "The minimum .NET SDK version which is used to run tests."
+        description: "[Deprecated] Use path_global_json instead."
         required: false
         type: string
         default: '10.0.100'
@@ -121,6 +121,7 @@ jobs:
     outputs:
       runs-ons: ${{ steps.runs-on-os-list.outputs.runs-ons }}
       test-projects: ${{ steps.test-projects.outputs.projects }}
+      required-dotnet-sdk-version: ${{ steps.required-dotnet-sdk-version.outputs.version }}
       test-runner: ${{ steps.test-configurations.outputs.runner }}
     env:
       RUNS_ON_OS_LIST_DEFAULT: "['ubuntu-latest', 'windows-latest', 'macos-latest']"
@@ -207,6 +208,32 @@ jobs:
 
         "projects=${output_json}" >> $Env:GITHUB_OUTPUT
 
+    - name: Determine required .NET SDK version
+      id: required-dotnet-sdk-version
+      background: true
+      shell: pwsh
+      env:
+        INPUT_PATH_GLOBAL_JSON: ${{ inputs.path_global_json }}
+      run: |
+        $path_to_global_json = $null
+
+        if (![string]::IsNullOrEmpty($env:INPUT_PATH_GLOBAL_JSON)) {
+          $path_to_global_json = [System.IO.Path]::Join($env:GITHUB_WORKSPACE, $env:INPUT_PATH_GLOBAL_JSON)
+        }
+
+        # get required SDK version specified in 'global.json'
+        if (
+          ![string]::IsNullOrEmpty($path_to_global_json) -and
+          (Test-Path -LiteralPath $path_to_global_json -PathType Leaf)
+        ) {
+          $sdk_version = jq -c -r ".sdk.version" $path_to_global_json
+
+          "version=${sdk_version}" >> $Env:GITHUB_OUTPUT
+        }
+        else {
+          "version=" >> $Env:GITHUB_OUTPUT
+        }
+
     - name: Determine test configurations
       id: test-configurations
       background: true
@@ -283,7 +310,7 @@ jobs:
           - ${{ fromJson(needs.setup.outputs.test-projects) }}
 
     steps:
-    - name: &prepare-dotnet-sdk-name Prepare .NET SDK ${{ inputs.dotnet_sdk_version }}
+    - name: &prepare-dotnet-sdk-name Prepare .NET SDK ${{ needs.setup.outputs.required-dotnet-sdk-version }}
       id: prepare-dotnet-sdk
       if: runner.os != 'Windows'
       background: true
@@ -292,7 +319,7 @@ jobs:
       #uses: &prepare-dotnet-sdk-action smdn/workflows-dotnet/actions/prepare-dotnet-sdk@949cc1db4b8c1ed5e7beea5d96faf9a72718a956 # actions/prepare-dotnet-sdk/v1.2.1
       uses: smdn/workflows-dotnet/actions/prepare-dotnet-sdk@949cc1db4b8c1ed5e7beea5d96faf9a72718a956 # actions/prepare-dotnet-sdk/v1.2.1
       with: &prepare-dotnet-sdk-action-params
-        minimal_dotnet_sdk_version: '${{ inputs.dotnet_sdk_version }}'
+        minimal_dotnet_sdk_version: '${{ needs.setup.outputs.required-dotnet-sdk-version }}'
 
     - name: *prepare-dotnet-sdk-name
       id: prepare-dotnet-sdk-non-background
