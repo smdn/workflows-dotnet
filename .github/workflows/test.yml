@@ -75,6 +75,12 @@ on:
         type: string
         default: ''
 
+      dotnet_test_options_configuration:
+        description: "The argument to be set to the `--configuration <CONFIGURATION>` option of the `dotnet build` and `dotnet test` command."
+        required: false
+        type: string
+        default: ''
+
       dotnet_test_options_framework:
         description: "The argument to be set to the `--framework <FRAMEWORK>` option of the `dotnet build` and `dotnet test` command."
         required: false
@@ -444,6 +450,7 @@ jobs:
       shell: pwsh
       env:
         INPUT_DOTNET_BUILD_OPTIONS_ENABLE_CONCURRENT_BUILD: ${{ inputs.dotnet_build_options_enable_concurrent_build == true }}
+        INPUT_DOTNET_TEST_OPTIONS_CONFIGURATION: ${{ inputs.dotnet_test_options_configuration }}
         INPUT_DOTNET_TEST_OPTIONS_FRAMEWORK: ${{ inputs.dotnet_test_options_framework }}
         INPUT_EXTRA_OPTIONS_COMMON: ${{ inputs.extra_options_common }}
         INPUT_PATH_TO_TEST_PROJECT: ${{ matrix.project.PathToTestProject }}
@@ -460,6 +467,12 @@ jobs:
           # used as the workaround for 'error MSB4018: The "GenerateDepsFile" task failed unexpectedly'
           # ref: https://github.com/dotnet/sdk/issues/2902
           $dotnet_build_options += @('-maxCpuCount:1')
+        }
+
+        if ( ! [string]::IsNullOrEmpty( $env:INPUT_DOTNET_TEST_OPTIONS_CONFIGURATION ) ) {
+          $dotnet_build_options += @(
+            '--configuration', $env:INPUT_DOTNET_TEST_OPTIONS_CONFIGURATION
+          )
         }
 
         if ( ! [string]::IsNullOrEmpty( $env:INPUT_DOTNET_TEST_OPTIONS_FRAMEWORK ) ) {
@@ -521,6 +534,7 @@ jobs:
       shell: pwsh
       env:
         VSTEST_CONNECTION_TIMEOUT: ${{ steps.test-timeouts.outputs.timeout_vstest_connection }}
+        INPUT_DOTNET_TEST_OPTIONS_CONFIGURATION: ${{ inputs.dotnet_test_options_configuration }}
         INPUT_DOTNET_TEST_OPTIONS_FRAMEWORK: ${{ inputs.dotnet_test_options_framework }}
         INPUT_DOTNET_TEST_OPTIONS_FILTER_EXPRESSION: ${{ inputs.dotnet_test_options_filter_expression }}
         INPUT_DOTNET_TEST_OPTIONS_OUTPUT_VERBOSITY_LEVEL: ${{ inputs.dotnet_test_options_output_verbosity_level }}
@@ -566,6 +580,12 @@ jobs:
           $dotnet_test_options += @(
             '--nologo',
             '--blame-hang-timeout', $env:INPUT_TIMEOUT_HANG
+          )
+        }
+
+        if ( ! [string]::IsNullOrEmpty( $env:INPUT_DOTNET_TEST_OPTIONS_CONFIGURATION ) ) {
+          $dotnet_test_options += @(
+            '--configuration', $env:INPUT_DOTNET_TEST_OPTIONS_CONFIGURATION
           )
         }
 
