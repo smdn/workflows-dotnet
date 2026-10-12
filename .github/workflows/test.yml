@@ -76,7 +76,7 @@ on:
         default: ''
 
       dotnet_test_options_framework:
-        description: "The argument to be set to the `--framework <FRAMEWORK>` option of the `dotnet test` command."
+        description: "The argument to be set to the `--framework <FRAMEWORK>` option of the `dotnet build` and `dotnet test` command."
         required: false
         type: string
         default: ''
