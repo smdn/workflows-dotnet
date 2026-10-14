@@ -58,12 +58,6 @@ on:
         type: string
         default: '10.0.100'
 
-      use_project_assets_sdk:
-        description: "If true, enables processing that uses project assets importing as MSBuild Project SDK."
-        required: false
-        type: boolean
-        default: true
-
       dry_run:
         description: "If true, performs a trial run."
         required: false
