@@ -75,7 +75,8 @@ jobs:
       package_version:              ${{ steps.release-info.outputs.package_version }}
       package_branch:               ${{ steps.release-info.outputs.package_branch }}
       package_prevver_tag:          ${{ steps.release-info.outputs.package_prevver_tag }}
-      package_available_nuget_org:  ${{ steps.push-nuget-org.outputs.pushed }}
+      package_available_nuget_org:        ${{ steps.push-nuget-org.outputs.pushed }}
+      package_available_github_packages:  ${{ steps.push-github-packages.outputs.pushed }}
 
     steps:
     - name: Prepare .NET SDK ${{ inputs.dotnet_sdk_version }}
@@ -475,7 +476,7 @@ jobs:
 
   publish-release:
     name: Publish release for '${{ needs.publish-release-target.outputs.release_tag }}'
-    uses: smdn/workflows-dotnet/.github/workflows/publish-release.yml@094e7450907373352051ca5062e0c2412b7ef8c0 # release-note/v1.1.1
+    uses: smdn/workflows-dotnet/.github/workflows/publish-release.yml@b411e2753bf628a8299b53887026a09d31145d1b # release-note/v1.1.2
     permissions:
       contents: write
     needs: publish-release-target
@@ -489,7 +490,8 @@ jobs:
       package_version:              ${{ needs.publish-release-target.outputs.package_version }}
       package_branch:               ${{ needs.publish-release-target.outputs.package_branch }}
       package_prevver_tag:          ${{ needs.publish-release-target.outputs.package_prevver_tag }}
-      package_available_nuget_org:  ${{ needs.publish-release-target.outputs.package_available_nuget_org == 'true' || needs.publish-release-target.outputs.package_available_nuget_org == 'True' }}
+      package_available_nuget_org:        ${{ needs.publish-release-target.outputs.package_available_nuget_org == 'true' || needs.publish-release-target.outputs.package_available_nuget_org == 'True' }}
+      package_available_github_packages:  ${{ needs.publish-release-target.outputs.package_available_github_packages == 'true' || needs.publish-release-target.outputs.package_available_github_packages == 'True' }}
       dry_run:                      ${{ inputs.dry_run == true }}
     secrets:
       token_gist:                   ${{ secrets.token_repo }}
