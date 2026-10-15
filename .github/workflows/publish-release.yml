@@ -23,8 +23,9 @@ on:
 
       release_note_url:
         description: "The URL of Gist where the release note for the package has been published."
-        required: true
+        required: false
         type: string
+        default: ''
 
       release_prerelease:
         description: "The boolean value that indicates whether the release should be published as a prerelease or not."
@@ -142,131 +143,133 @@ jobs:
           [void]$release_notes_body.AppendLine()
         }
 
-        #
-        # Downloads release note files from gist and attempts to append them to release notes.
-        # If the body exceeds the maximum length when appended, will cancel appending.
-        #
-        [void]$release_notes_body.AppendLine('# Release notes')
-        [void]$release_notes_body.AppendLine("The [full release notes](${env:INPUT_RELEASE_NOTE_URL}) are available at gist.")
-        [void]$release_notes_body.AppendLine()
+        if ( ! [string]::IsNullOrEmpty( $env:INPUT_RELEASE_NOTE_URL ) ) {
+          #
+          # Downloads release note files from gist and attempts to append them to release notes.
+          # If the body exceeds the maximum length when appended, will cancel appending.
+          #
+          [void]$release_notes_body.AppendLine('# Release notes')
+          [void]$release_notes_body.AppendLine("The [full release notes](${env:INPUT_RELEASE_NOTE_URL}) are available at gist.")
+          [void]$release_notes_body.AppendLine()
 
-        $release_note_sections = @(
-          [PSCustomObject]@{
-            FileNameSuffix = '.changelog.md'
-            Title = 'Change log'
-            Header = $([String]::Join(
-              "`n",
-              @(
-                '<details>'
-                '<summary>Change log in this release:</summary>'
-                '<div>'
-                ''
-              )
-            ))
-            Footer = $([String]::Join(
-              "`n",
-              @(
-                ''
-                '</div>'
-                '</details>'
-              )
-            ))
-          }
-          [PSCustomObject]@{
-            FileNameSuffix = '.api-changes.diff'
-            Title = 'API changes'
-            Header = $([String]::Join(
-              "`n",
-              @(
-                '<details>'
-                '<summary>API changes in this release:</summary>'
-                '<div>'
-                ''
-                '```diff'
-              )
-            ))
-            Footer = $([String]::Join(
-              "`n",
-              @(
-                '```'
-                ''
-                '</div>'
-                '</details>'
-              )
-            ))
-          }
-          [PSCustomObject]@{
-            FileNameSuffix = '.full-changes.diff'
-            Title = 'Full changes'
-            Header = $([String]::Join(
-              "`n",
-              @(
-                '<details>'
-                '<summary>Full changes in this release:</summary>'
-                '<div>'
-                ''
-                '```diff'
-              )
-            ))
-            Footer = $([String]::Join(
-              "`n",
-              @(
-                '```'
-                ''
-                '</div>'
-                '</details>'
-              )
-            ))
-          }
-        )
+          $release_note_sections = @(
+            [PSCustomObject]@{
+              FileNameSuffix = '.changelog.md'
+              Title = 'Change log'
+              Header = $([String]::Join(
+                "`n",
+                @(
+                  '<details>'
+                  '<summary>Change log in this release:</summary>'
+                  '<div>'
+                  ''
+                )
+              ))
+              Footer = $([String]::Join(
+                "`n",
+                @(
+                  ''
+                  '</div>'
+                  '</details>'
+                )
+              ))
+            }
+            [PSCustomObject]@{
+              FileNameSuffix = '.api-changes.diff'
+              Title = 'API changes'
+              Header = $([String]::Join(
+                "`n",
+                @(
+                  '<details>'
+                  '<summary>API changes in this release:</summary>'
+                  '<div>'
+                  ''
+                  '```diff'
+                )
+              ))
+              Footer = $([String]::Join(
+                "`n",
+                @(
+                  '```'
+                  ''
+                  '</div>'
+                  '</details>'
+                )
+              ))
+            }
+            [PSCustomObject]@{
+              FileNameSuffix = '.full-changes.diff'
+              Title = 'Full changes'
+              Header = $([String]::Join(
+                "`n",
+                @(
+                  '<details>'
+                  '<summary>Full changes in this release:</summary>'
+                  '<div>'
+                  ''
+                  '```diff'
+                )
+              ))
+              Footer = $([String]::Join(
+                "`n",
+                @(
+                  '```'
+                  ''
+                  '</div>'
+                  '</details>'
+                )
+              ))
+            }
+          )
 
-        # list release note files from gist
-        $release_note_files = gh gist view `
-          $env:INPUT_RELEASE_NOTE_URL `
-          --files
-
-        # download release note files
-        foreach ( $section in $release_note_sections ) {
-          $release_note_file = $release_note_files |
-            where { $_.StartsWith('releasenote.') -And $_.EndsWith($section.FileNameSuffix) } |
-            select -First 1
-
-          if ( ! $release_note_file ) {
-            continue
-          }
-
-          $release_note_content = gh gist view `
+          # list release note files from gist
+          $release_note_files = gh gist view `
             $env:INPUT_RELEASE_NOTE_URL `
-            --raw `
-            --filename $release_note_file
+            --files
 
-          $section
-            | Add-Member `
-            -MemberType NoteProperty `
-            -Name 'Content' `
-            -Value $release_note_content
-        }
+          # download release note files
+          foreach ( $section in $release_note_sections ) {
+            $release_note_file = $release_note_files |
+              where { $_.StartsWith('releasenote.') -And $_.EndsWith($section.FileNameSuffix) } |
+              select -First 1
 
-        # construct release note section
-        foreach ( $section in $release_note_sections ) {
-          if ( [string]::IsNullOrEmpty( $section.Content ) ) {
-            continue
+            if ( ! $release_note_file ) {
+              continue
+            }
+
+            $release_note_content = gh gist view `
+              $env:INPUT_RELEASE_NOTE_URL `
+              --raw `
+              --filename $release_note_file
+
+            $section
+              | Add-Member `
+              -MemberType NoteProperty `
+              -Name 'Content' `
+              -Value $release_note_content
           }
 
-          $section_body = New-Object System.Text.StringBuilder -ArgumentList 10240
+          # construct release note section
+          foreach ( $section in $release_note_sections ) {
+            if ( [string]::IsNullOrEmpty( $section.Content ) ) {
+              continue
+            }
 
-          [void]$section_body.AppendLine("## $($section.Title)")
-          [void]$section_body.AppendLine($section.Header)
-          [void]$section_body.AppendLine($section.Content -join "`n")
-          [void]$section_body.AppendLine($section.Footer)
-          [void]$section_body.AppendLine()
+            $section_body = New-Object System.Text.StringBuilder -ArgumentList 10240
 
-          # attempt to append constructed section
-          if ( $release_notes_body_max_length -lt $release_notes_body.Length + $section_body.Length ) {
-            break;
+            [void]$section_body.AppendLine("## $($section.Title)")
+            [void]$section_body.AppendLine($section.Header)
+            [void]$section_body.AppendLine($section.Content -join "`n")
+            [void]$section_body.AppendLine($section.Footer)
+            [void]$section_body.AppendLine()
+
+            # attempt to append constructed section
+            if ( $release_notes_body_max_length -lt $release_notes_body.Length + $section_body.Length ) {
+              break;
+            }
+
+            [void]$release_notes_body.Append($section_body.ToString())
           }
-
-          [void]$release_notes_body.Append($section_body.ToString())
         }
 
         # append release notes content for a release
