@@ -82,12 +82,13 @@ on:
 
 jobs:
   publish-release:
+    name: Publish release for '${{ inputs.package_id }}-${{ inputs.package_version }}'
     runs-on: ${{ inputs.workflow_runs_on }}
     permissions:
       contents: write
 
     steps:
-    - name: Create release note files for ${{ inputs.release_tag }}
+    - name: Create release note files for ${{ inputs.package_id }}-${{ inputs.package_version }}
       id: release-notes-file
       env:
         GH_TOKEN: ${{ secrets.token_gist }}

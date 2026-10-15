@@ -85,6 +85,7 @@ env:
 
 jobs:
   generate-release-target:
+    name: Generate release target for ${{ inputs.release_target_tag_name }}
     runs-on: ${{ inputs.workflow_runs_on }}
     permissions:
       contents: write
