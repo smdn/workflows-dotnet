@@ -46,6 +46,12 @@ on:
         type: string
         default: "doc/api-list/"
 
+      generate_release_note:
+        description: "If `true`, create release notes, upload them to Gist, and include them in the body of the release created by the subsequent workflow."
+        required: false
+        type: boolean
+        default: true
+
       workflow_runs_on:
         description: "The OS label which run the workflow on. (ubuntu-latest, ubuntu-24.04, ubuntu-22.04, etc.)"
         required: false
@@ -629,6 +635,7 @@ jobs:
 
     - name: Create release note for ${{ steps.package-info.outputs.package_id_with_version }}
       id: releasenote
+      if: inputs.generate_release_note
       shell: pwsh
       env:
         GH_TOKEN: ${{ secrets.token_gist }}
@@ -742,7 +749,12 @@ jobs:
           [void]$pr_body.AppendLine('- release_prerelease: `true`')
         }
         [void]$pr_body.AppendLine('- release_draft: `false` ❗Change this value to `true` to publish release note as a draft.')
-        [void]$pr_body.AppendLine("- release_note_url: [``${env:INPUT_URL}``](${env:INPUT_URL})")
+        if ( [string]::IsNullOrEmpty( $env:INPUT_URL ) ) {
+          [void]$pr_body.AppendLine("- release_note_url:")
+        }
+        else {
+          [void]$pr_body.AppendLine("- release_note_url: [``${env:INPUT_URL}``](${env:INPUT_URL})")
+        }
 
         if ( $env:INPUT_PACKAGE_CAN_RELEASE -ieq 'True' ) {
           [void]$pr_body.AppendLine("- artifact_name_nupkg: ``${env:INPUT_ARTIFACT_NAME_NUPKG}`` ❗Remove this line or change this value to empty to prevent publishing packages.")
