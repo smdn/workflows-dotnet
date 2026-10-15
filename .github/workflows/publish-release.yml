@@ -65,6 +65,12 @@ on:
         type: boolean
         default: false
 
+      package_available_github_packages:
+        description: "The boolean value that indicates whether the released package has been pushed to GitHub Packages or not."
+        required: false
+        type: boolean
+        default: false
+
       dry_run:
         description: "If true, performs a trial run."
         required: false
@@ -94,6 +100,7 @@ jobs:
         GH_TOKEN: ${{ secrets.token_gist }}
         INPUT_DRY_RUN: ${{ inputs.dry_run == true }}
         INPUT_PACKAGE_AVAILABLE_NUGET_ORG: ${{ inputs.package_available_nuget_org == true }}
+        INPUT_PACKAGE_AVAILABLE_GITHUB_PACKAGES: ${{ inputs.package_available_github_packages == true }}
         INPUT_PACKAGE_ID: ${{ inputs.package_id }}
         INPUT_PACKAGE_VERSION: ${{ inputs.package_version }}
         INPUT_RELEASE_NOTE_URL: ${{ inputs.release_note_url }}
@@ -101,23 +108,37 @@ jobs:
         INPUT_RELEASE_TAG: ${{ inputs.release_tag }}
         INPUT_PACKAGE_BRANCH: ${{ inputs.package_branch }}
         INPUT_PACKAGE_PREVVER_TAG: ${{ inputs.package_prevver_tag }}
+        INPUT_GITHUB_PACKAGES_OWNER: ${{ github.repository_owner }} # TODO: make configurable, support organization
       shell: pwsh
       run: |
         $dry_run = $env:INPUT_DRY_RUN -ieq 'true'
         $is_package_available_nuget_org = $env:INPUT_PACKAGE_AVAILABLE_NUGET_ORG -ieq 'true'
+        $is_package_available_github_packages = $env:INPUT_PACKAGE_AVAILABLE_GITHUB_PACKAGES -ieq 'true'
 
         # note: the maximum size of the release body seems to be 125,000 characters (textarea#release_body@data-input-max-length="125000")
         $release_notes_body_max_length = 125000
         $release_notes_body = New-Object System.Text.StringBuilder -ArgumentList 10240
         $release_notes_output_path = [System.IO.Path]::GetFullPath('releasenotes.md')
 
-        if ( $is_package_available_nuget_org -Or $dry_run ) {
+        if ( $is_package_available_nuget_org -Or $is_package_available_github_packages -Or $dry_run ) {
           [void]$release_notes_body.AppendLine('# Released package')
-          [void]$release_notes_body.AppendFormat(
-            '- NuGet [{0} version {1}](https://www.nuget.org/packages/{0}/{1})',
-            $env:INPUT_PACKAGE_ID,
-            $env:INPUT_PACKAGE_VERSION
-          ).AppendLine()
+
+          if ( $is_package_available_nuget_org -Or $dry_run ) {
+            [void]$release_notes_body.AppendFormat(
+              '- NuGet [{0} version {1}](https://www.nuget.org/packages/{0}/{1})',
+              $env:INPUT_PACKAGE_ID,
+              $env:INPUT_PACKAGE_VERSION
+            ).AppendLine()
+          }
+
+          if ( $is_package_available_github_packages -Or $dry_run ) {
+            [void]$release_notes_body.AppendFormat(
+              '- GitHub Packages [{0} version {1}](https://github.com/users/{0}/packages/nuget/package/{1})',
+              $env:INPUT_GITHUB_PACKAGES_OWNER,
+              $env:INPUT_PACKAGE_ID
+            ).AppendLine()
+          }
+
           [void]$release_notes_body.AppendLine()
         }
 
