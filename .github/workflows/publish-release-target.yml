@@ -219,8 +219,7 @@ jobs:
           $release_draft = "true"
         }
         if ( ! $release_info_dict.TryGetValue( "release_note_url", [ref]$release_note_url ) ) {
-          "::error::release_note_url could not be determined."
-          exit 1
+          "::warning::`release_note_url` could not be determined. Release notes may not have been generated."
         }
 
         # notice determined info
