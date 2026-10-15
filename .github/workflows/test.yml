@@ -271,6 +271,7 @@ jobs:
 
   env-info:
     name: Environment information of ${{ matrix.os }}
+    if: inputs.verbose
     needs: [setup]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 3
