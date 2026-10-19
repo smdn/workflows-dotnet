@@ -134,9 +134,10 @@ jobs:
 
           if ( $is_package_available_github_packages -Or $dry_run ) {
             [void]$release_notes_body.AppendFormat(
-              '- GitHub Packages [{0} version {1}](https://github.com/users/{0}/packages/nuget/package/{1})',
+              '- GitHub Packages [{1} version {2}](https://github.com/users/{0}/packages/nuget/package/{1})',
               $env:INPUT_GITHUB_PACKAGES_OWNER,
-              $env:INPUT_PACKAGE_ID
+              $env:INPUT_PACKAGE_ID,
+              $env:INPUT_PACKAGE_VERSION
             ).AppendLine()
           }
 
