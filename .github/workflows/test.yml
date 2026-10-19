@@ -24,7 +24,7 @@ on:
         description: "[Deprecated] Use path_global_json instead."
         required: false
         type: string
-        default: '10.0.100'
+        default: "10.0.100"
 
       path_prefix_tests:
         description: "The common prefix of the path to test projects' root directory based on the repository root."
@@ -36,7 +36,7 @@ on:
         description: "The path to the 'global.json' file that configures the test environment."
         required: false
         type: string
-        default: 'global.json'
+        default: "global.json"
 
       timeout_minutes_test_job:
         description: "The timeout minutes for each test jobs."
@@ -48,19 +48,19 @@ on:
         description: "The value to be set to option `--blame-hang-timeout`. (example: `[{'OS':'Windows','Timeout':'5min'},{'OS':'','Timeout':'3min'}]`)"
         required: false
         type: string
-        default: ''
+        default: ""
 
       timeout_vstest_connection:
         description: "The value to be set to VSTEST_CONNECTION_TIMEOUT. (example: `[{'OS':'Windows','Timeout':180},{'OS':'','Timeout':60}]`)"
         required: false
         type: string
-        default: ''
+        default: ""
 
       extra_options_common:
         description: "The common extra options to be set on running the `dotnet restore/build/test` command."
         required: false
         type: string
-        default: ''
+        default: ""
 
       dotnet_build_options_enable_concurrent_build:
         description: "If false, disables concurrent project build."
@@ -73,31 +73,31 @@ on:
         description: "The argument to be set to the `--verbosity <LEVEL>` option of the `dotnet test` command. <LEVEL> := q[uiet], m[inimal], n[ormal], d[etailed], diag[nostic]"
         required: false
         type: string
-        default: ''
+        default: ""
 
       dotnet_test_options_configuration:
         description: "The argument to be set to the `--configuration <CONFIGURATION>` option of the `dotnet build` and `dotnet test` command."
         required: false
         type: string
-        default: ''
+        default: ""
 
       dotnet_test_options_framework:
         description: "The argument to be set to the `--framework <FRAMEWORK>` option of the `dotnet build` and `dotnet test` command."
         required: false
         type: string
-        default: ''
+        default: ""
 
       dotnet_test_options_filter_expression:
         description: "The argument to be set to the `--filter <EXPRESSION>` option of the `dotnet test` command."
         required: false
         type: string
-        default: ''
+        default: ""
 
       dotnet_test_options_output_verbosity_level:
         description: "The argument to be set to the `--output <VERBOSITY_LEVEL>` option of the `dotnet test` command."
         required: false
         type: string
-        default: ''
+        default: ""
 
       verbose:
         description: "If true, enables verbose output."
@@ -107,7 +107,7 @@ on:
 
     secrets:
       token_repo:
-        description: 'The token which is used to checkout code.'
+        description: "The token which is used to checkout code."
         required: true
 
 env:
@@ -133,141 +133,141 @@ jobs:
       RUNS_ON_OS_LIST_DEFAULT: "['ubuntu-latest', 'windows-latest', 'macos-latest']"
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      with:
-        token: ${{ secrets.token_repo }}
-        fetch-depth: 1
-        persist-credentials: false
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          token: ${{ secrets.token_repo }}
+          fetch-depth: 1
+          persist-credentials: false
 
-    - name: Determine OS list which run the tests on
-      id: runs-on-os-list
-      background: true
-      shell: pwsh
-      env:
-        INPUT_VERBOSE: ${{ inputs.verbose == true }}
-        INPUT_OS: ${{ inputs.os }}
-      run: |
-        $verbose = $env:INPUT_VERBOSE -ieq 'true'
-        $os_list = $Env:RUNS_ON_OS_LIST_DEFAULT | ConvertFrom-Json
+      - name: Determine OS list which run the tests on
+        id: runs-on-os-list
+        background: true
+        shell: pwsh
+        env:
+          INPUT_VERBOSE: ${{ inputs.verbose == true }}
+          INPUT_OS: ${{ inputs.os }}
+        run: |
+          $verbose = $env:INPUT_VERBOSE -ieq 'true'
+          $os_list = $Env:RUNS_ON_OS_LIST_DEFAULT | ConvertFrom-Json
 
-        if ( ! [string]::IsNullOrEmpty( $env:INPUT_OS ) ) {
-          $os_list = $env:INPUT_OS.Split(",", [System.StringSplitOptions]::TrimEntries -bor [System.StringSplitOptions]::RemoveEmptyEntries)
-        }
-
-        '### Test runs on' >> $Env:GITHUB_STEP_SUMMARY
-        foreach ($os in $os_list) {
-          "- ``${os}``" >> $Env:GITHUB_STEP_SUMMARY
-        }
-
-        if ( $verbose ) {
-          foreach ($os in $os_list) {
-            "::notice::test runs on: ${os}"
+          if ( ! [string]::IsNullOrEmpty( $env:INPUT_OS ) ) {
+            $os_list = $env:INPUT_OS.Split(",", [System.StringSplitOptions]::TrimEntries -bor [System.StringSplitOptions]::RemoveEmptyEntries)
           }
-        }
 
-        "runs-ons=$($os_list | ConvertTo-Json -Compress)" >> $Env:GITHUB_OUTPUT
-
-    - name: Determine test projects
-      id: test-projects
-      background: true
-      shell: pwsh
-      env:
-        INPUT_VERBOSE: ${{ inputs.verbose == true }}
-        INPUT_PATH_PREFIX_TESTS: ${{ inputs.path_prefix_tests }}
-        INPUT_PROJECT: ${{ inputs.project }}
-      run: |
-        $verbose = $env:INPUT_VERBOSE -ieq 'true'
-        $directory_tests = [System.IO.Path]::Join($env:GITHUB_WORKSPACE, $env:INPUT_PATH_PREFIX_TESTS)
-
-        # find all project from directories which contains the file named '*.Tests.csproj'
-        $projects = Get-ChildItem -Path "${directory_tests}/*/*.Tests.csproj" -File | `
-          select `
-            @{
-              Name = 'Name'
-              Expression = {$_.Directory.Name}
-            },
-            @{
-              Name = 'PathToTestProject'
-              Expression = {[System.IO.Path]::GetRelativePath($env:GITHUB_WORKSPACE, $_.FullName)}
-            }
-
-        if ( ! [string]::IsNullOrEmpty( $env:INPUT_PROJECT ) ) {
-          $projects = $projects | where Name -eq $env:INPUT_PROJECT
-        }
-
-        '### Test project'    >> $Env:GITHUB_STEP_SUMMARY
-        ''                    >> $Env:GITHUB_STEP_SUMMARY
-        '|Name|Project path|' >> $Env:GITHUB_STEP_SUMMARY
-        '|----|------------|' >> $Env:GITHUB_STEP_SUMMARY
-
-        foreach ($proj in $projects) {
-          "|``$($proj.'Name')``|``$($proj.'PathToTestProject')``|" >> $Env:GITHUB_STEP_SUMMARY
+          '### Test runs on' >> $Env:GITHUB_STEP_SUMMARY
+          foreach ($os in $os_list) {
+            "- ``${os}``" >> $Env:GITHUB_STEP_SUMMARY
+          }
 
           if ( $verbose ) {
-            "::notice::test project: $($proj.'Name') ($($proj.'PathToTestProject'))"
+            foreach ($os in $os_list) {
+              "::notice::test runs on: ${os}"
+            }
           }
-        }
 
-        $output_json = $projects | ConvertTo-Json -Compress
-        $output_json
+          "runs-ons=$($os_list | ConvertTo-Json -Compress)" >> $Env:GITHUB_OUTPUT
 
-        "projects=${output_json}" >> $Env:GITHUB_OUTPUT
+      - name: Determine test projects
+        id: test-projects
+        background: true
+        shell: pwsh
+        env:
+          INPUT_VERBOSE: ${{ inputs.verbose == true }}
+          INPUT_PATH_PREFIX_TESTS: ${{ inputs.path_prefix_tests }}
+          INPUT_PROJECT: ${{ inputs.project }}
+        run: |
+          $verbose = $env:INPUT_VERBOSE -ieq 'true'
+          $directory_tests = [System.IO.Path]::Join($env:GITHUB_WORKSPACE, $env:INPUT_PATH_PREFIX_TESTS)
 
-    - name: Determine required .NET SDK version
-      id: required-dotnet-sdk-version
-      background: true
-      shell: pwsh
-      env:
-        INPUT_PATH_GLOBAL_JSON: ${{ inputs.path_global_json }}
-      run: |
-        $path_to_global_json = $null
+          # find all project from directories which contains the file named '*.Tests.csproj'
+          $projects = Get-ChildItem -Path "${directory_tests}/*/*.Tests.csproj" -File | `
+            select `
+              @{
+                Name = 'Name'
+                Expression = {$_.Directory.Name}
+              },
+              @{
+                Name = 'PathToTestProject'
+                Expression = {[System.IO.Path]::GetRelativePath($env:GITHUB_WORKSPACE, $_.FullName)}
+              }
 
-        if (![string]::IsNullOrEmpty($env:INPUT_PATH_GLOBAL_JSON)) {
-          $path_to_global_json = [System.IO.Path]::Join($env:GITHUB_WORKSPACE, $env:INPUT_PATH_GLOBAL_JSON)
-        }
+          if ( ! [string]::IsNullOrEmpty( $env:INPUT_PROJECT ) ) {
+            $projects = $projects | where Name -eq $env:INPUT_PROJECT
+          }
 
-        # get required SDK version specified in 'global.json'
-        if (
-          ![string]::IsNullOrEmpty($path_to_global_json) -and
-          (Test-Path -LiteralPath $path_to_global_json -PathType Leaf)
-        ) {
-          $sdk_version = jq -c -r ".sdk.version" $path_to_global_json
+          '### Test project'    >> $Env:GITHUB_STEP_SUMMARY
+          ''                    >> $Env:GITHUB_STEP_SUMMARY
+          '|Name|Project path|' >> $Env:GITHUB_STEP_SUMMARY
+          '|----|------------|' >> $Env:GITHUB_STEP_SUMMARY
 
-          "version=${sdk_version}" >> $Env:GITHUB_OUTPUT
-        }
-        else {
-          "version=" >> $Env:GITHUB_OUTPUT
-        }
+          foreach ($proj in $projects) {
+            "|``$($proj.'Name')``|``$($proj.'PathToTestProject')``|" >> $Env:GITHUB_STEP_SUMMARY
 
-    - name: Determine test configurations
-      id: test-configurations
-      background: true
-      shell: pwsh
-      env:
-        INPUT_PATH_GLOBAL_JSON: ${{ inputs.path_global_json }}
-      run: |
-        $path_to_global_json = $null
+            if ( $verbose ) {
+              "::notice::test project: $($proj.'Name') ($($proj.'PathToTestProject'))"
+            }
+          }
 
-        if (![string]::IsNullOrEmpty($env:INPUT_PATH_GLOBAL_JSON)) {
-          $path_to_global_json = [System.IO.Path]::Join($env:GITHUB_WORKSPACE, $env:INPUT_PATH_GLOBAL_JSON)
-        }
+          $output_json = $projects | ConvertTo-Json -Compress
+          $output_json
 
-        # get the test runner name specified in 'global.json'
-        if (
-          ![string]::IsNullOrEmpty($path_to_global_json) -and
-          (Test-Path -LiteralPath $path_to_global_json -PathType Leaf)
-        ) {
-          $test_runner = jq -c -r ".test.runner" $path_to_global_json
+          "projects=${output_json}" >> $Env:GITHUB_OUTPUT
 
-          "runner=${test_runner}" >> $Env:GITHUB_OUTPUT
-        }
-        else {
-          "runner=" >> $Env:GITHUB_OUTPUT
-        }
+      - name: Determine required .NET SDK version
+        id: required-dotnet-sdk-version
+        background: true
+        shell: pwsh
+        env:
+          INPUT_PATH_GLOBAL_JSON: ${{ inputs.path_global_json }}
+        run: |
+          $path_to_global_json = $null
 
-    - name: Wait for step outputs
-      wait-all:
+          if (![string]::IsNullOrEmpty($env:INPUT_PATH_GLOBAL_JSON)) {
+            $path_to_global_json = [System.IO.Path]::Join($env:GITHUB_WORKSPACE, $env:INPUT_PATH_GLOBAL_JSON)
+          }
+
+          # get required SDK version specified in 'global.json'
+          if (
+            ![string]::IsNullOrEmpty($path_to_global_json) -and
+            (Test-Path -LiteralPath $path_to_global_json -PathType Leaf)
+          ) {
+            $sdk_version = jq -c -r ".sdk.version" $path_to_global_json
+
+            "version=${sdk_version}" >> $Env:GITHUB_OUTPUT
+          }
+          else {
+            "version=" >> $Env:GITHUB_OUTPUT
+          }
+
+      - name: Determine test configurations
+        id: test-configurations
+        background: true
+        shell: pwsh
+        env:
+          INPUT_PATH_GLOBAL_JSON: ${{ inputs.path_global_json }}
+        run: |
+          $path_to_global_json = $null
+
+          if (![string]::IsNullOrEmpty($env:INPUT_PATH_GLOBAL_JSON)) {
+            $path_to_global_json = [System.IO.Path]::Join($env:GITHUB_WORKSPACE, $env:INPUT_PATH_GLOBAL_JSON)
+          }
+
+          # get the test runner name specified in 'global.json'
+          if (
+            ![string]::IsNullOrEmpty($path_to_global_json) -and
+            (Test-Path -LiteralPath $path_to_global_json -PathType Leaf)
+          ) {
+            $test_runner = jq -c -r ".test.runner" $path_to_global_json
+
+            "runner=${test_runner}" >> $Env:GITHUB_OUTPUT
+          }
+          else {
+            "runner=" >> $Env:GITHUB_OUTPUT
+          }
+
+      - name: Wait for step outputs
+        wait-all:
 
   env-info:
     name: Environment information of ${{ matrix.os }}
@@ -282,24 +282,24 @@ jobs:
           - ${{ fromJson(needs.setup.outputs.runs-ons) }}
 
     steps:
-    - name: .NET info
-      shell: pwsh
-      run: |
-        '<details>'                     >> $Env:GITHUB_STEP_SUMMARY
-        '<summary>.NET info</summary>'  >> $Env:GITHUB_STEP_SUMMARY
-        '<pre><code>'                   >> $Env:GITHUB_STEP_SUMMARY
-        dotnet --info                   >> $Env:GITHUB_STEP_SUMMARY
-        '</code></pre>'                 >> $Env:GITHUB_STEP_SUMMARY
-        '</details>'                    >> $Env:GITHUB_STEP_SUMMARY
+      - name: .NET info
+        shell: pwsh
+        run: |
+          '<details>'                     >> $Env:GITHUB_STEP_SUMMARY
+          '<summary>.NET info</summary>'  >> $Env:GITHUB_STEP_SUMMARY
+          '<pre><code>'                   >> $Env:GITHUB_STEP_SUMMARY
+          dotnet --info                   >> $Env:GITHUB_STEP_SUMMARY
+          '</code></pre>'                 >> $Env:GITHUB_STEP_SUMMARY
+          '</details>'                    >> $Env:GITHUB_STEP_SUMMARY
 
-        '<details>'                               >> $Env:GITHUB_STEP_SUMMARY
-        '<summary>RuntimeInformation</summary>'   >> $Env:GITHUB_STEP_SUMMARY
-        ''                                        >> $Env:GITHUB_STEP_SUMMARY
-        '- `RuntimeInformation.OSArchitecture`: '       + [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture       >> $Env:GITHUB_STEP_SUMMARY
-        '- `RuntimeInformation.OSDescription`: '        + [System.Runtime.InteropServices.RuntimeInformation]::OSDescription        >> $Env:GITHUB_STEP_SUMMARY
-        '- `RuntimeInformation.ProcessArchitecture`: '  + [System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture  >> $Env:GITHUB_STEP_SUMMARY
-        '- `RuntimeInformation.RuntimeIdentifier`: '    + [System.Runtime.InteropServices.RuntimeInformation]::RuntimeIdentifier    >> $Env:GITHUB_STEP_SUMMARY
-        '</details>'                              >> $Env:GITHUB_STEP_SUMMARY
+          '<details>'                               >> $Env:GITHUB_STEP_SUMMARY
+          '<summary>RuntimeInformation</summary>'   >> $Env:GITHUB_STEP_SUMMARY
+          ''                                        >> $Env:GITHUB_STEP_SUMMARY
+          '- `RuntimeInformation.OSArchitecture`: '       + [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture       >> $Env:GITHUB_STEP_SUMMARY
+          '- `RuntimeInformation.OSDescription`: '        + [System.Runtime.InteropServices.RuntimeInformation]::OSDescription        >> $Env:GITHUB_STEP_SUMMARY
+          '- `RuntimeInformation.ProcessArchitecture`: '  + [System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture  >> $Env:GITHUB_STEP_SUMMARY
+          '- `RuntimeInformation.RuntimeIdentifier`: '    + [System.Runtime.InteropServices.RuntimeInformation]::RuntimeIdentifier    >> $Env:GITHUB_STEP_SUMMARY
+          '</details>'                              >> $Env:GITHUB_STEP_SUMMARY
 
   run-tests:
     name: Test ${{ matrix.project.Name }} on ${{ matrix.os }}
@@ -317,280 +317,280 @@ jobs:
           - ${{ fromJson(needs.setup.outputs.test-projects) }}
 
     steps:
-    - name: &prepare-dotnet-sdk-name Prepare .NET SDK ${{ needs.setup.outputs.required-dotnet-sdk-version }}
-      id: prepare-dotnet-sdk
-      if: runner.os != 'Windows'
-      background: true
-      uses: &prepare-dotnet-sdk-action smdn/workflows-dotnet/actions/prepare-dotnet-sdk@ca77c33b60b27d8734f7e7cc02f97a9b274c6779 # actions/prepare-dotnet-sdk/v1.3.0
-      with: &prepare-dotnet-sdk-action-params
-        minimal_dotnet_sdk_version: '${{ needs.setup.outputs.required-dotnet-sdk-version }}'
+      - name: &prepare-dotnet-sdk-name Prepare .NET SDK ${{ needs.setup.outputs.required-dotnet-sdk-version }}
+        id: prepare-dotnet-sdk
+        if: runner.os != 'Windows'
+        background: true
+        uses: &prepare-dotnet-sdk-action smdn/workflows-dotnet/actions/prepare-dotnet-sdk@ca77c33b60b27d8734f7e7cc02f97a9b274c6779 # actions/prepare-dotnet-sdk/v1.3.0
+        with: &prepare-dotnet-sdk-action-params
+          minimal_dotnet_sdk_version: "${{ needs.setup.outputs.required-dotnet-sdk-version }}"
 
-    - name: *prepare-dotnet-sdk-name
-      id: prepare-dotnet-sdk-non-background
-      # Workaround: Run synchronously on Windows to avoid OS-specific file locking conflicts (sharing violations).
-      # Since 'background' does not accept expressions (${{ ... }}), YAML anchors are used to reuse configurations across split steps.
-      if: runner.os == 'Windows'
-      uses: *prepare-dotnet-sdk-action
-      with: *prepare-dotnet-sdk-action-params
+      - name: *prepare-dotnet-sdk-name
+        id: prepare-dotnet-sdk-non-background
+        # Workaround: Run synchronously on Windows to avoid OS-specific file locking conflicts (sharing violations).
+        # Since 'background' does not accept expressions (${{ ... }}), YAML anchors are used to reuse configurations across split steps.
+        if: runner.os == 'Windows'
+        uses: *prepare-dotnet-sdk-action
+        with: *prepare-dotnet-sdk-action-params
 
-    - name: Configure git
-      run: |
-        git config --global core.autocrlf input
-        git config --global core.safecrlf true
-        git config --global core.ignorecase false
+      - name: Configure git
+        run: |
+          git config --global core.autocrlf input
+          git config --global core.safecrlf true
+          git config --global core.ignorecase false
 
-    - name: &checkout-repository-name Checkout repository
-      id: checkout-repository
-      if: runner.os != 'Windows'
-      background: true
-      uses: &checkout-repository-action actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      with: &checkout-repository-action-params
-        token: ${{ secrets.token_repo }}
-        fetch-depth: 1
-        persist-credentials: false
+      - name: &checkout-repository-name Checkout repository
+        id: checkout-repository
+        if: runner.os != 'Windows'
+        background: true
+        uses: &checkout-repository-action actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: &checkout-repository-action-params
+          token: ${{ secrets.token_repo }}
+          fetch-depth: 1
+          persist-credentials: false
 
-    - name: *checkout-repository-name
-      id: checkout-repository-non-background
-      # Workaround: Run synchronously on Windows to avoid OS-specific file locking conflicts (sharing violations).
-      # Since 'background' does not accept expressions (${{ ... }}), YAML anchors are used to reuse configurations across split steps.
-      if: runner.os == 'Windows'
-      uses: *checkout-repository-action
-      with: *checkout-repository-action-params
+      - name: *checkout-repository-name
+        id: checkout-repository-non-background
+        # Workaround: Run synchronously on Windows to avoid OS-specific file locking conflicts (sharing violations).
+        # Since 'background' does not accept expressions (${{ ... }}), YAML anchors are used to reuse configurations across split steps.
+        if: runner.os == 'Windows'
+        uses: *checkout-repository-action
+        with: *checkout-repository-action-params
 
-    - name: Set NUGET_PACKAGES
-      id: set-nuget-packages
-      shell: pwsh
-      env:
-        INPUT_VERBOSE: ${{ inputs.verbose == true }}
-      run: |
-        $verbose = $env:INPUT_VERBOSE -ieq 'true'
-        $path_to_nuget_packages =[System.IO.Path]::Combine(
-          $env:GITHUB_WORKSPACE,
-          '.nuget',
-          'packages'
-        )
-
-        if ( $verbose ) {
-          "::notice::NUGET_PACKAGES=${path_to_nuget_packages}"
-        }
-
-        $cache_key_suffix = [System.String]::Concat(
-          $([System.Globalization.ISOWeek]::GetYear([System.DateTime]::Now)),
-          '-W',
-          $([System.Globalization.ISOWeek]::GetWeekOfYear([System.DateTime]::Now))
-        )
-
-        "NUGET_PACKAGES=${path_to_nuget_packages}" >> $Env:GITHUB_ENV
-        "path-to-nuget-packages=${path_to_nuget_packages}" >> $Env:GITHUB_OUTPUT
-        "cache-key-suffix=${cache_key_suffix}" >> $Env:GITHUB_OUTPUT
-
-    - name: &setup-nuget-cache-name Setup NuGet cache
-      id: setup-nuget-cache
-      if: runner.os != 'Windows'
-      background: true
-      # ref: https://github.com/actions/cache/blob/master/examples.md#c---nuget
-      uses: &setup-nuget-cache-action actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-      env: &setup-nuget-cache-envvars
-        SEGMENT_DOWNLOAD_TIMEOUT_MINS: 5
-      with: &setup-nuget-cache-action-params
-        path: ${{ steps.set-nuget-packages.outputs.path-to-nuget-packages }}
-        key: test-NuGetPackages-${{ matrix.os }}-${{ steps.set-nuget-packages.outputs.cache-key-suffix }}
-        restore-keys: test-NuGetPackages-${{ matrix.os }}
-
-    - name: *setup-nuget-cache-name
-      id: setup-nuget-cache-non-background
-      # Workaround: Run synchronously on Windows to avoid OS-specific file locking conflicts (sharing violations).
-      # Since 'background' does not accept expressions (${{ ... }}), YAML anchors are used to reuse configurations across split steps.
-      if: runner.os == 'Windows'
-      uses: *setup-nuget-cache-action
-      env: *setup-nuget-cache-envvars
-      with: *setup-nuget-cache-action-params
-
-    - name: Wait for prerequisite steps
-      wait: [prepare-dotnet-sdk, checkout-repository, setup-nuget-cache]
-
-    - name: Restore dependencies of ${{ matrix.project.Name }}
-      shell: pwsh
-      env:
-        INPUT_EXTRA_OPTIONS_COMMON: ${{ inputs.extra_options_common }}
-        INPUT_PATH_TO_TEST_PROJECT: ${{ matrix.project.PathToTestProject }}
-      run: |
-        # build the options for `dotnet restore`
-        $dotnet_restore_options = @(
-          '--nologo'
-        )
-
-        if ( ! [string]::IsNullOrEmpty( $env:INPUT_EXTRA_OPTIONS_COMMON ) ) {
-          $dotnet_restore_options += @( $env:INPUT_EXTRA_OPTIONS_COMMON )
-        }
-
-        $dotnet_restore_options += @( $env:INPUT_PATH_TO_TEST_PROJECT )
-
-        "dotnet restore ${dotnet_restore_options}"
-        dotnet restore @dotnet_restore_options
-
-    - name: Build test project ${{ matrix.project.Name }}
-      shell: pwsh
-      env:
-        INPUT_DOTNET_BUILD_OPTIONS_ENABLE_CONCURRENT_BUILD: ${{ inputs.dotnet_build_options_enable_concurrent_build == true }}
-        INPUT_DOTNET_TEST_OPTIONS_CONFIGURATION: ${{ inputs.dotnet_test_options_configuration }}
-        INPUT_DOTNET_TEST_OPTIONS_FRAMEWORK: ${{ inputs.dotnet_test_options_framework }}
-        INPUT_EXTRA_OPTIONS_COMMON: ${{ inputs.extra_options_common }}
-        INPUT_PATH_TO_TEST_PROJECT: ${{ matrix.project.PathToTestProject }}
-      run: |
-        # build the options for `dotnet build`
-        $dotnet_build_options = @(
-          '--nologo',
-          '--no-restore',
-          '-consoleLoggerParameters:NoSummary'
-        )
-
-        if ( $env:INPUT_DOTNET_BUILD_OPTIONS_ENABLE_CONCURRENT_BUILD -ine 'true' ) {
-          # set '-maxCpuCount:1' to disable concurrent build
-          # used as the workaround for 'error MSB4018: The "GenerateDepsFile" task failed unexpectedly'
-          # ref: https://github.com/dotnet/sdk/issues/2902
-          $dotnet_build_options += @('-maxCpuCount:1')
-        }
-
-        if ( ! [string]::IsNullOrEmpty( $env:INPUT_DOTNET_TEST_OPTIONS_CONFIGURATION ) ) {
-          $dotnet_build_options += @(
-            '--configuration', $env:INPUT_DOTNET_TEST_OPTIONS_CONFIGURATION
+      - name: Set NUGET_PACKAGES
+        id: set-nuget-packages
+        shell: pwsh
+        env:
+          INPUT_VERBOSE: ${{ inputs.verbose == true }}
+        run: |
+          $verbose = $env:INPUT_VERBOSE -ieq 'true'
+          $path_to_nuget_packages =[System.IO.Path]::Combine(
+            $env:GITHUB_WORKSPACE,
+            '.nuget',
+            'packages'
           )
-        }
 
-        if ( ! [string]::IsNullOrEmpty( $env:INPUT_DOTNET_TEST_OPTIONS_FRAMEWORK ) ) {
-          $dotnet_build_options += @(
-            '--framework', $env:INPUT_DOTNET_TEST_OPTIONS_FRAMEWORK
+          if ( $verbose ) {
+            "::notice::NUGET_PACKAGES=${path_to_nuget_packages}"
+          }
+
+          $cache_key_suffix = [System.String]::Concat(
+            $([System.Globalization.ISOWeek]::GetYear([System.DateTime]::Now)),
+            '-W',
+            $([System.Globalization.ISOWeek]::GetWeekOfYear([System.DateTime]::Now))
           )
-        }
 
-        if ( ! [string]::IsNullOrEmpty( $env:INPUT_EXTRA_OPTIONS_COMMON ) ) {
-          $dotnet_build_options += @( $env:INPUT_EXTRA_OPTIONS_COMMON )
-        }
+          "NUGET_PACKAGES=${path_to_nuget_packages}" >> $Env:GITHUB_ENV
+          "path-to-nuget-packages=${path_to_nuget_packages}" >> $Env:GITHUB_OUTPUT
+          "cache-key-suffix=${cache_key_suffix}" >> $Env:GITHUB_OUTPUT
 
-        $dotnet_build_options += @( $env:INPUT_PATH_TO_TEST_PROJECT )
+      - name: &setup-nuget-cache-name Setup NuGet cache
+        id: setup-nuget-cache
+        if: runner.os != 'Windows'
+        background: true
+        # ref: https://github.com/actions/cache/blob/master/examples.md#c---nuget
+        uses: &setup-nuget-cache-action actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        env: &setup-nuget-cache-envvars
+          SEGMENT_DOWNLOAD_TIMEOUT_MINS: 5
+        with: &setup-nuget-cache-action-params
+          path: ${{ steps.set-nuget-packages.outputs.path-to-nuget-packages }}
+          key: test-NuGetPackages-${{ matrix.os }}-${{ steps.set-nuget-packages.outputs.cache-key-suffix }}
+          restore-keys: test-NuGetPackages-${{ matrix.os }}
 
-        "dotnet build ${dotnet_build_options}"
-        dotnet build @dotnet_build_options
+      - name: *setup-nuget-cache-name
+        id: setup-nuget-cache-non-background
+        # Workaround: Run synchronously on Windows to avoid OS-specific file locking conflicts (sharing violations).
+        # Since 'background' does not accept expressions (${{ ... }}), YAML anchors are used to reuse configurations across split steps.
+        if: runner.os == 'Windows'
+        uses: *setup-nuget-cache-action
+        env: *setup-nuget-cache-envvars
+        with: *setup-nuget-cache-action-params
 
-    - name: Determine test timeout values
-      id: test-timeouts
-      shell: pwsh
-      env:
-        INPUT_TIMEOUT_HANG: ${{ inputs.timeout_hang }}
-        INPUT_TIMEOUT_VSTEST_CONNECTION: ${{ inputs.timeout_vstest_connection }}
-        INPUT_TEST_RUNNER: ${{ needs.setup.outputs.test-runner }}
-      run: |
-        $use_mtp_test_runner = $env:INPUT_TEST_RUNNER -ieq 'Microsoft.Testing.Platform'
+      - name: Wait for prerequisite steps
+        wait: [prepare-dotnet-sdk, checkout-repository, setup-nuget-cache]
 
-        $timeout_hang = $env:INPUT_TIMEOUT_HANG | `
-          ConvertFrom-Json | `
-          where { ($_.OS -ieq $env:RUNNER_OS) -or [string]::IsNullOrEmpty($_.OS) } | `
-          select -ExpandProperty Timeout -First 1
-
-        $timeout_vstest_connection = $env:INPUT_TIMEOUT_VSTEST_CONNECTION | `
-          ConvertFrom-Json | `
-          where { ($_.OS -ieq $env:RUNNER_OS) -or [string]::IsNullOrEmpty($_.OS) } | `
-          select -ExpandProperty Timeout -First 1
-
-        # set fallback value
-        $timeout_hang ??= '3minutes'
-        $timeout_vstest_connection ??= 90
-
-        # set output
-        if ($use_mtp_test_runner) {
-          # output for the case of Microsoft.Testing.Platform
-          $timeout = $timeout_hang
-          $timeout = $timeout.Replace('seconds','s').Replace('second','s').Replace('secs','s').Replace('sec','s')
-          $timeout = $timeout.Replace('minutes','m').Replace('minute','m').Replace('mins','m').Replace('min','m')
-          $timeout = $timeout.Replace('hours','h').Replace('hour','h').Replace('hrs','h')
-
-          "timeout=${timeout}" >> $Env:GITHUB_OUTPUT
-        }
-        else {
-          # If the runner is not MTP, assume that the VSTest will be used
-          "timeout_hang=${timeout_hang}" >> $Env:GITHUB_OUTPUT
-          "timeout_vstest_connection=${timeout_vstest_connection}" >> $Env:GITHUB_OUTPUT
-        }
-
-    - name: Test ${{ matrix.project.Name }}
-      shell: pwsh
-      env:
-        VSTEST_CONNECTION_TIMEOUT: ${{ steps.test-timeouts.outputs.timeout_vstest_connection }}
-        INPUT_DOTNET_TEST_OPTIONS_CONFIGURATION: ${{ inputs.dotnet_test_options_configuration }}
-        INPUT_DOTNET_TEST_OPTIONS_FRAMEWORK: ${{ inputs.dotnet_test_options_framework }}
-        INPUT_DOTNET_TEST_OPTIONS_FILTER_EXPRESSION: ${{ inputs.dotnet_test_options_filter_expression }}
-        INPUT_DOTNET_TEST_OPTIONS_OUTPUT_VERBOSITY_LEVEL: ${{ inputs.dotnet_test_options_output_verbosity_level }}
-        INPUT_DOTNET_TEST_OPTIONS_VERBOSITY_LEVEL: ${{ inputs.dotnet_test_options_verbosity_level }}
-        INPUT_EXTRA_OPTIONS_COMMON: ${{ inputs.extra_options_common }}
-        INPUT_PATH_TO_TEST_PROJECT: ${{ matrix.project.PathToTestProject }}
-        INPUT_TEST_RUNNER: ${{ needs.setup.outputs.test-runner }}
-        INPUT_TIMEOUT: ${{ steps.test-timeouts.outputs.timeout }}
-        INPUT_TIMEOUT_HANG: ${{ steps.test-timeouts.outputs.timeout_hang }}
-      run: |
-        $option_verbosity_level = $env:INPUT_DOTNET_TEST_OPTIONS_VERBOSITY_LEVEL
-        $use_mtp_test_runner = $env:INPUT_TEST_RUNNER -ieq 'Microsoft.Testing.Platform'
-
-        if ([string]::IsNullOrEmpty($option_verbosity_level)) {
-          $option_verbosity_level = 'quiet' # default verbosity level
-        }
-
-        $option_output_verbosity_level = $env:INPUT_DOTNET_TEST_OPTIONS_OUTPUT_VERBOSITY_LEVEL
-
-        if ([string]::IsNullOrEmpty($option_output_verbosity_level)) {
-          $option_output_verbosity_level = 'Normal' # default output verbosity level
-        }
-
-        # build the options for `dotnet test`
-        $dotnet_test_options = @(
-          '--no-restore',
-          '--no-build',
-          '--verbosity', $option_verbosity_level
-        )
-
-        if ($use_mtp_test_runner) {
-          # options for Microsoft.Testing.Platform test runner
-          $dotnet_test_options += @(
-            '--no-ansi',
-            '--no-progress',
-            '--timeout', $env:INPUT_TIMEOUT,
-            '--output', $option_output_verbosity_level,
-            '--project', $env:INPUT_PATH_TO_TEST_PROJECT
+      - name: Restore dependencies of ${{ matrix.project.Name }}
+        shell: pwsh
+        env:
+          INPUT_EXTRA_OPTIONS_COMMON: ${{ inputs.extra_options_common }}
+          INPUT_PATH_TO_TEST_PROJECT: ${{ matrix.project.PathToTestProject }}
+        run: |
+          # build the options for `dotnet restore`
+          $dotnet_restore_options = @(
+            '--nologo'
           )
-        }
-        else {
-          # If the runner is not MTP, assume that the VSTest will be used
-          $dotnet_test_options += @(
+
+          if ( ! [string]::IsNullOrEmpty( $env:INPUT_EXTRA_OPTIONS_COMMON ) ) {
+            $dotnet_restore_options += @( $env:INPUT_EXTRA_OPTIONS_COMMON )
+          }
+
+          $dotnet_restore_options += @( $env:INPUT_PATH_TO_TEST_PROJECT )
+
+          "dotnet restore ${dotnet_restore_options}"
+          dotnet restore @dotnet_restore_options
+
+      - name: Build test project ${{ matrix.project.Name }}
+        shell: pwsh
+        env:
+          INPUT_DOTNET_BUILD_OPTIONS_ENABLE_CONCURRENT_BUILD: ${{ inputs.dotnet_build_options_enable_concurrent_build == true }}
+          INPUT_DOTNET_TEST_OPTIONS_CONFIGURATION: ${{ inputs.dotnet_test_options_configuration }}
+          INPUT_DOTNET_TEST_OPTIONS_FRAMEWORK: ${{ inputs.dotnet_test_options_framework }}
+          INPUT_EXTRA_OPTIONS_COMMON: ${{ inputs.extra_options_common }}
+          INPUT_PATH_TO_TEST_PROJECT: ${{ matrix.project.PathToTestProject }}
+        run: |
+          # build the options for `dotnet build`
+          $dotnet_build_options = @(
             '--nologo',
-            '--blame-hang-timeout', $env:INPUT_TIMEOUT_HANG
+            '--no-restore',
+            '-consoleLoggerParameters:NoSummary'
           )
-        }
 
-        if ( ! [string]::IsNullOrEmpty( $env:INPUT_DOTNET_TEST_OPTIONS_CONFIGURATION ) ) {
-          $dotnet_test_options += @(
-            '--configuration', $env:INPUT_DOTNET_TEST_OPTIONS_CONFIGURATION
+          if ( $env:INPUT_DOTNET_BUILD_OPTIONS_ENABLE_CONCURRENT_BUILD -ine 'true' ) {
+            # set '-maxCpuCount:1' to disable concurrent build
+            # used as the workaround for 'error MSB4018: The "GenerateDepsFile" task failed unexpectedly'
+            # ref: https://github.com/dotnet/sdk/issues/2902
+            $dotnet_build_options += @('-maxCpuCount:1')
+          }
+
+          if ( ! [string]::IsNullOrEmpty( $env:INPUT_DOTNET_TEST_OPTIONS_CONFIGURATION ) ) {
+            $dotnet_build_options += @(
+              '--configuration', $env:INPUT_DOTNET_TEST_OPTIONS_CONFIGURATION
+            )
+          }
+
+          if ( ! [string]::IsNullOrEmpty( $env:INPUT_DOTNET_TEST_OPTIONS_FRAMEWORK ) ) {
+            $dotnet_build_options += @(
+              '--framework', $env:INPUT_DOTNET_TEST_OPTIONS_FRAMEWORK
+            )
+          }
+
+          if ( ! [string]::IsNullOrEmpty( $env:INPUT_EXTRA_OPTIONS_COMMON ) ) {
+            $dotnet_build_options += @( $env:INPUT_EXTRA_OPTIONS_COMMON )
+          }
+
+          $dotnet_build_options += @( $env:INPUT_PATH_TO_TEST_PROJECT )
+
+          "dotnet build ${dotnet_build_options}"
+          dotnet build @dotnet_build_options
+
+      - name: Determine test timeout values
+        id: test-timeouts
+        shell: pwsh
+        env:
+          INPUT_TIMEOUT_HANG: ${{ inputs.timeout_hang }}
+          INPUT_TIMEOUT_VSTEST_CONNECTION: ${{ inputs.timeout_vstest_connection }}
+          INPUT_TEST_RUNNER: ${{ needs.setup.outputs.test-runner }}
+        run: |
+          $use_mtp_test_runner = $env:INPUT_TEST_RUNNER -ieq 'Microsoft.Testing.Platform'
+
+          $timeout_hang = $env:INPUT_TIMEOUT_HANG | `
+            ConvertFrom-Json | `
+            where { ($_.OS -ieq $env:RUNNER_OS) -or [string]::IsNullOrEmpty($_.OS) } | `
+            select -ExpandProperty Timeout -First 1
+
+          $timeout_vstest_connection = $env:INPUT_TIMEOUT_VSTEST_CONNECTION | `
+            ConvertFrom-Json | `
+            where { ($_.OS -ieq $env:RUNNER_OS) -or [string]::IsNullOrEmpty($_.OS) } | `
+            select -ExpandProperty Timeout -First 1
+
+          # set fallback value
+          $timeout_hang ??= '3minutes'
+          $timeout_vstest_connection ??= 90
+
+          # set output
+          if ($use_mtp_test_runner) {
+            # output for the case of Microsoft.Testing.Platform
+            $timeout = $timeout_hang
+            $timeout = $timeout.Replace('seconds','s').Replace('second','s').Replace('secs','s').Replace('sec','s')
+            $timeout = $timeout.Replace('minutes','m').Replace('minute','m').Replace('mins','m').Replace('min','m')
+            $timeout = $timeout.Replace('hours','h').Replace('hour','h').Replace('hrs','h')
+
+            "timeout=${timeout}" >> $Env:GITHUB_OUTPUT
+          }
+          else {
+            # If the runner is not MTP, assume that the VSTest will be used
+            "timeout_hang=${timeout_hang}" >> $Env:GITHUB_OUTPUT
+            "timeout_vstest_connection=${timeout_vstest_connection}" >> $Env:GITHUB_OUTPUT
+          }
+
+      - name: Test ${{ matrix.project.Name }}
+        shell: pwsh
+        env:
+          VSTEST_CONNECTION_TIMEOUT: ${{ steps.test-timeouts.outputs.timeout_vstest_connection }}
+          INPUT_DOTNET_TEST_OPTIONS_CONFIGURATION: ${{ inputs.dotnet_test_options_configuration }}
+          INPUT_DOTNET_TEST_OPTIONS_FRAMEWORK: ${{ inputs.dotnet_test_options_framework }}
+          INPUT_DOTNET_TEST_OPTIONS_FILTER_EXPRESSION: ${{ inputs.dotnet_test_options_filter_expression }}
+          INPUT_DOTNET_TEST_OPTIONS_OUTPUT_VERBOSITY_LEVEL: ${{ inputs.dotnet_test_options_output_verbosity_level }}
+          INPUT_DOTNET_TEST_OPTIONS_VERBOSITY_LEVEL: ${{ inputs.dotnet_test_options_verbosity_level }}
+          INPUT_EXTRA_OPTIONS_COMMON: ${{ inputs.extra_options_common }}
+          INPUT_PATH_TO_TEST_PROJECT: ${{ matrix.project.PathToTestProject }}
+          INPUT_TEST_RUNNER: ${{ needs.setup.outputs.test-runner }}
+          INPUT_TIMEOUT: ${{ steps.test-timeouts.outputs.timeout }}
+          INPUT_TIMEOUT_HANG: ${{ steps.test-timeouts.outputs.timeout_hang }}
+        run: |
+          $option_verbosity_level = $env:INPUT_DOTNET_TEST_OPTIONS_VERBOSITY_LEVEL
+          $use_mtp_test_runner = $env:INPUT_TEST_RUNNER -ieq 'Microsoft.Testing.Platform'
+
+          if ([string]::IsNullOrEmpty($option_verbosity_level)) {
+            $option_verbosity_level = 'quiet' # default verbosity level
+          }
+
+          $option_output_verbosity_level = $env:INPUT_DOTNET_TEST_OPTIONS_OUTPUT_VERBOSITY_LEVEL
+
+          if ([string]::IsNullOrEmpty($option_output_verbosity_level)) {
+            $option_output_verbosity_level = 'Normal' # default output verbosity level
+          }
+
+          # build the options for `dotnet test`
+          $dotnet_test_options = @(
+            '--no-restore',
+            '--no-build',
+            '--verbosity', $option_verbosity_level
           )
-        }
 
-        if ( ! [string]::IsNullOrEmpty( $env:INPUT_DOTNET_TEST_OPTIONS_FRAMEWORK ) ) {
-          $dotnet_test_options += @(
-            '--framework', $env:INPUT_DOTNET_TEST_OPTIONS_FRAMEWORK
-          )
-        }
+          if ($use_mtp_test_runner) {
+            # options for Microsoft.Testing.Platform test runner
+            $dotnet_test_options += @(
+              '--no-ansi',
+              '--no-progress',
+              '--timeout', $env:INPUT_TIMEOUT,
+              '--output', $option_output_verbosity_level,
+              '--project', $env:INPUT_PATH_TO_TEST_PROJECT
+            )
+          }
+          else {
+            # If the runner is not MTP, assume that the VSTest will be used
+            $dotnet_test_options += @(
+              '--nologo',
+              '--blame-hang-timeout', $env:INPUT_TIMEOUT_HANG
+            )
+          }
 
-        if ( ! [string]::IsNullOrEmpty( $env:INPUT_DOTNET_TEST_OPTIONS_FILTER_EXPRESSION ) ) {
-          $dotnet_test_options += @(
-            '--filter', $env:INPUT_DOTNET_TEST_OPTIONS_FILTER_EXPRESSION
-          )
-        }
+          if ( ! [string]::IsNullOrEmpty( $env:INPUT_DOTNET_TEST_OPTIONS_CONFIGURATION ) ) {
+            $dotnet_test_options += @(
+              '--configuration', $env:INPUT_DOTNET_TEST_OPTIONS_CONFIGURATION
+            )
+          }
 
-        if ( ! [string]::IsNullOrEmpty( $env:INPUT_EXTRA_OPTIONS_COMMON ) ) {
-          $dotnet_test_options += @( $env:INPUT_EXTRA_OPTIONS_COMMON )
-        }
+          if ( ! [string]::IsNullOrEmpty( $env:INPUT_DOTNET_TEST_OPTIONS_FRAMEWORK ) ) {
+            $dotnet_test_options += @(
+              '--framework', $env:INPUT_DOTNET_TEST_OPTIONS_FRAMEWORK
+            )
+          }
 
-        if (!$use_mtp_test_runner) {
-          $dotnet_test_options += @( $env:INPUT_PATH_TO_TEST_PROJECT )
-        }
+          if ( ! [string]::IsNullOrEmpty( $env:INPUT_DOTNET_TEST_OPTIONS_FILTER_EXPRESSION ) ) {
+            $dotnet_test_options += @(
+              '--filter', $env:INPUT_DOTNET_TEST_OPTIONS_FILTER_EXPRESSION
+            )
+          }
 
-        "dotnet test ${dotnet_test_options}"
-        dotnet test @dotnet_test_options
+          if ( ! [string]::IsNullOrEmpty( $env:INPUT_EXTRA_OPTIONS_COMMON ) ) {
+            $dotnet_test_options += @( $env:INPUT_EXTRA_OPTIONS_COMMON )
+          }
+
+          if (!$use_mtp_test_runner) {
+            $dotnet_test_options += @( $env:INPUT_PATH_TO_TEST_PROJECT )
+          }
+
+          "dotnet test ${dotnet_test_options}"
+          dotnet test @dotnet_test_options

@@ -19,7 +19,7 @@ on:
         description: "The label which indicating that the PR requests to merge the release working branch."
         required: false
         type: string
-        default: ''
+        default: ""
 
       workflow_runs_on:
         description: "The OS label which run the workflow on. (ubuntu-latest, ubuntu-24.04, ubuntu-22.04, etc.)"
@@ -31,7 +31,7 @@ on:
         description: "The minimum .NET SDK version which is used to publish the release target."
         required: false
         type: string
-        default: '10.0.100'
+        default: "10.0.100"
 
       dry_run:
         description: "If true, performs a trial run."
@@ -41,15 +41,15 @@ on:
 
     secrets:
       token_repo:
-        description: 'The token which is used to checkout code, view pull request of release target, download artifact from the precedent workflow, and create a new release.'
+        description: "The token which is used to checkout code, view pull request of release target, download artifact from the precedent workflow, and create a new release."
         required: true
 
       token_push_nuget_org:
-        description: 'The token which is used to push a package to nuget.org.'
+        description: "The token which is used to push a package to nuget.org."
         required: false
 
       token_push_github_packages:
-        description: 'The token which is used to push a package to GitHub Packages.'
+        description: "The token which is used to push a package to GitHub Packages."
         required: false
 
 env:
@@ -79,399 +79,399 @@ jobs:
       package_available_github_packages:  ${{ steps.push-github-packages.outputs.pushed }}
 
     steps:
-    - name: Prepare .NET SDK ${{ inputs.dotnet_sdk_version }}
-      id: prepare-dotnet-sdk
-      background: true
-      uses: smdn/workflows-dotnet/actions/prepare-dotnet-sdk@ca77c33b60b27d8734f7e7cc02f97a9b274c6779 # actions/prepare-dotnet-sdk/v1.3.0
-      with:
-        minimal_dotnet_sdk_version: '${{ inputs.dotnet_sdk_version }}'
+      - name: Prepare .NET SDK ${{ inputs.dotnet_sdk_version }}
+        id: prepare-dotnet-sdk
+        background: true
+        uses: smdn/workflows-dotnet/actions/prepare-dotnet-sdk@ca77c33b60b27d8734f7e7cc02f97a9b274c6779 # actions/prepare-dotnet-sdk/v1.3.0
+        with:
+          minimal_dotnet_sdk_version: "${{ inputs.dotnet_sdk_version }}"
 
-    - name: Configure git
-      run: |
-        git config --global core.autocrlf input
-        git config --global core.safecrlf true
-        git config --global core.ignorecase false
+      - name: Configure git
+        run: |
+          git config --global core.autocrlf input
+          git config --global core.safecrlf true
+          git config --global core.ignorecase false
 
-    - name: Checkout repository
-      id: checkout-repository
-      # note: checkout repository firstly due to working directory will be cleaned up on checkout
-      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      with:
-        token: ${{ secrets.token_repo }}
-        persist-credentials: true
+      - name: Checkout repository
+        id: checkout-repository
+        # note: checkout repository firstly due to working directory will be cleaned up on checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          token: ${{ secrets.token_repo }}
+          persist-credentials: true
 
-    - name: Check pull request labels
-      if: ${{ inputs.pr_label_request_for_release != '' }}
-      env:
-        GH_TOKEN: ${{ secrets.token_repo }}
-        INPUT_PR_NUMBER_REQUEST_FOR_RELEASE: ${{ inputs.pr_number_request_for_release }}
-        INPUT_GITHUB_REPOSITORY: ${{ github.repository }}
-        INPUT_PR_LABEL_REQUEST_FOR_RELEASE: ${{ inputs.pr_label_request_for_release }}
-      shell: pwsh
-      run: |
-        $labels = gh pr view `
-          $env:INPUT_PR_NUMBER_REQUEST_FOR_RELEASE `
-          --repo $env:INPUT_GITHUB_REPOSITORY `
-          --json labels `
-          --template '[ {{ range $i, $l := .labels }} {{if $i}},{{end}} ''{{$l.name}}'' {{ end }} ]'
+      - name: Check pull request labels
+        if: ${{ inputs.pr_label_request_for_release != '' }}
+        env:
+          GH_TOKEN: ${{ secrets.token_repo }}
+          INPUT_PR_NUMBER_REQUEST_FOR_RELEASE: ${{ inputs.pr_number_request_for_release }}
+          INPUT_GITHUB_REPOSITORY: ${{ github.repository }}
+          INPUT_PR_LABEL_REQUEST_FOR_RELEASE: ${{ inputs.pr_label_request_for_release }}
+        shell: pwsh
+        run: |
+          $labels = gh pr view `
+            $env:INPUT_PR_NUMBER_REQUEST_FOR_RELEASE `
+            --repo $env:INPUT_GITHUB_REPOSITORY `
+            --json labels `
+            --template '[ {{ range $i, $l := .labels }} {{if $i}},{{end}} ''{{$l.name}}'' {{ end }} ]'
 
-        "${labels}"
+          "${labels}"
 
-        $release_pr_label = $labels | `
-          ConvertFrom-Json | `
-          where { $_ -eq $env:INPUT_PR_LABEL_REQUEST_FOR_RELEASE } | `
-          select -First 1
+          $release_pr_label = $labels | `
+            ConvertFrom-Json | `
+            where { $_ -eq $env:INPUT_PR_LABEL_REQUEST_FOR_RELEASE } | `
+            select -First 1
 
-        if ( [string]::IsNullOrEmpty( $release_pr_label ) ) {
-          "::error::The required label '${env:INPUT_PR_LABEL_REQUEST_FOR_RELEASE}' is not set to the pull request."
-          exit 1
-        }
-
-    - name: Determine release target information
-      id: release-info
-      # needs: steps.checkout-repository
-      background: true
-      env:
-        GH_TOKEN: ${{ secrets.token_repo }}
-        INPUT_PR_NUMBER_REQUEST_FOR_RELEASE: ${{ inputs.pr_number_request_for_release }}
-        INPUT_GITHUB_REPOSITORY: ${{ github.repository }}
-      shell: pwsh
-      run: |
-        $release_pr_body = gh pr view `
-          $env:INPUT_PR_NUMBER_REQUEST_FOR_RELEASE `
-          --repo $env:INPUT_GITHUB_REPOSITORY `
-          --json body `
-          --template '{{.body}}'
-
-        # Convert the array into a single string to perform regular expression matching
-        $release_pr_body_string = "$release_pr_body"
-
-        if ($release_pr_body_string -match ([regex]::escape("/${env:INPUT_GITHUB_REPOSITORY}/actions/runs/") + '(?<run_id>[0-9]+)')) {
-          $precedent_workflow_run_id = $Matches['run_id']
-        }
-        else {
-          "::error::precedent workflow run id could not be determined."
-          exit 1
-        }
-
-        $release_target_info_list = (
-          $release_pr_body |
-          Select-String -Pattern '(?m)^\- (?<key>[a-z_]+)\: \[?`(?<value>[^`]+)`\]?.*$' -AllMatches
-        ).Matches
-        $release_info_dict = [System.Collections.Generic.Dictionary[String, String]]::new()
-
-        foreach ($pair in $release_target_info_list) {
-          if ( ! $release_info_dict.ContainsKey($pair.Groups['key'].Value) ) {
-            # stores the first value found
-            $release_info_dict[$pair.Groups['key'].Value] = $pair.Groups['value'].Value
+          if ( [string]::IsNullOrEmpty( $release_pr_label ) ) {
+            "::error::The required label '${env:INPUT_PR_LABEL_REQUEST_FOR_RELEASE}' is not set to the pull request."
+            exit 1
           }
-        }
 
-        [string]$package_target_tag = $null
-        [string]$package_prevver_tag = $null
-        [string]$package_id = $null
-        [string]$package_id_with_version = $null
-        [string]$package_version = $null
-        [string]$package_branch = $null
-        [string]$release_working_branch = $null
-        [string]$release_tag = $null
-        [string]$release_prerelease = $null
-        [string]$release_draft = $null
-        [string]$release_note_url = $null
+      - name: Determine release target information
+        id: release-info
+        # needs: steps.checkout-repository
+        background: true
+        env:
+          GH_TOKEN: ${{ secrets.token_repo }}
+          INPUT_PR_NUMBER_REQUEST_FOR_RELEASE: ${{ inputs.pr_number_request_for_release }}
+          INPUT_GITHUB_REPOSITORY: ${{ github.repository }}
+        shell: pwsh
+        run: |
+          $release_pr_body = gh pr view `
+            $env:INPUT_PR_NUMBER_REQUEST_FOR_RELEASE `
+            --repo $env:INPUT_GITHUB_REPOSITORY `
+            --json body `
+            --template '{{.body}}'
 
-        if ( ! $release_info_dict.TryGetValue( "package_target_tag", [ref]$package_target_tag ) ) {
-          "::error::package_target_tag could not be determined."
-          exit 1
-        }
-        if ( ! $release_info_dict.TryGetValue( "package_prevver_tag", [ref]$package_prevver_tag ) ) {
-          "::warning::package_prevver_tag could not be determined."
-        }
-        if ( ! $release_info_dict.TryGetValue( "package_id", [ref]$package_id ) ) {
-          "::error::package_id could not be determined."
-          exit 1
-        }
-        if ( ! $release_info_dict.TryGetValue( "package_id_with_version", [ref]$package_id_with_version ) ) {
-          "::error::package_id_with_version could not be determined."
-          exit 1
-        }
-        if ( ! $release_info_dict.TryGetValue( "package_version", [ref]$package_version ) ) {
-          "::error::package_version could not be determined."
-          exit 1
-        }
-        if ( ! $release_info_dict.TryGetValue( "package_branch", [ref]$package_branch ) ) {
-          "::error::package_branch could not be determined."
-          exit 1
-        }
-        if ( ! $release_info_dict.TryGetValue( "release_working_branch", [ref]$release_working_branch ) ) {
-          "::error::release_working_branch could not be determined."
-          exit 1
-        }
-        if ( ! $release_info_dict.TryGetValue( "release_tag", [ref]$release_tag ) ) {
-          "::error::release_tag could not be determined."
-          exit 1
-        }
-        if ( ! $release_info_dict.TryGetValue( "release_prerelease", [ref]$release_prerelease ) ) {
-          # if value is not explicitly specified, publish release as a prerelease
-          $release_prerelease = "true"
-        }
-        if ( ! $release_info_dict.TryGetValue( "release_draft", [ref]$release_draft ) ) {
-          # if value is not explicitly specified, publish release as a draft
-          $release_draft = "true"
-        }
-        if ( ! $release_info_dict.TryGetValue( "release_note_url", [ref]$release_note_url ) ) {
-          "::warning::`release_note_url` could not be determined. Release notes may not have been generated."
-        }
+          # Convert the array into a single string to perform regular expression matching
+          $release_pr_body_string = "$release_pr_body"
 
-        # notice determined info
-        "## :shipit: Release target information" >> $Env:GITHUB_STEP_SUMMARY
-        "" >> $Env:GITHUB_STEP_SUMMARY
-        "| name | value |" >> $Env:GITHUB_STEP_SUMMARY
-        "| ---- | ----- |" >> $Env:GITHUB_STEP_SUMMARY
-        "| package_target_tag | ``${package_target_tag}`` |"                  >> $Env:GITHUB_STEP_SUMMARY
-        "| package_prevver_tag | ``${package_prevver_tag}`` |"                >> $Env:GITHUB_STEP_SUMMARY
-        "| package_id | ``${package_id}`` |"                                  >> $Env:GITHUB_STEP_SUMMARY
-        "| package_id_with_version | ``${package_id_with_version}`` |"        >> $Env:GITHUB_STEP_SUMMARY
-        "| package_version | ``${package_version}`` |"                        >> $Env:GITHUB_STEP_SUMMARY
-        "| package_branch | ``${package_branch}`` |"                          >> $Env:GITHUB_STEP_SUMMARY
-        "| release_working_branch | ``${release_working_branch}`` |"          >> $Env:GITHUB_STEP_SUMMARY
-        "| release_tag | ``${release_tag}`` |"                                >> $Env:GITHUB_STEP_SUMMARY
-        "| release_prerelease | ``${release_prerelease}`` |"                  >> $Env:GITHUB_STEP_SUMMARY
-        "| release_draft | ``${release_draft}`` |"                            >> $Env:GITHUB_STEP_SUMMARY
-        "| release_note_url | ``${release_note_url}`` |"                      >> $Env:GITHUB_STEP_SUMMARY
-        "| precedent_workflow_run_id | ``${precedent_workflow_run_id}`` |"    >> $Env:GITHUB_STEP_SUMMARY
+          if ($release_pr_body_string -match ([regex]::escape("/${env:INPUT_GITHUB_REPOSITORY}/actions/runs/") + '(?<run_id>[0-9]+)')) {
+            $precedent_workflow_run_id = $Matches['run_id']
+          }
+          else {
+            "::error::precedent workflow run id could not be determined."
+            exit 1
+          }
 
-        # set outputs
-        "package_target_tag=${package_target_tag}"                  >> $Env:GITHUB_OUTPUT
-        "package_prevver_tag=${package_prevver_tag}"                >> $Env:GITHUB_OUTPUT
-        "package_id=${package_id}"                                  >> $Env:GITHUB_OUTPUT
-        "package_id_with_version=${package_id_with_version}"        >> $Env:GITHUB_OUTPUT
-        "package_version=${package_version}"                        >> $Env:GITHUB_OUTPUT
-        "package_branch=${package_branch}"                          >> $Env:GITHUB_OUTPUT
-        "release_working_branch=${release_working_branch}"          >> $Env:GITHUB_OUTPUT
-        "release_tag=${release_tag}"                                >> $Env:GITHUB_OUTPUT
-        "release_prerelease=${release_prerelease}"                  >> $Env:GITHUB_OUTPUT
-        "release_draft=${release_draft}"                            >> $Env:GITHUB_OUTPUT
-        "release_note_url=${release_note_url}"                      >> $Env:GITHUB_OUTPUT
-        "precedent_workflow_run_id=${precedent_workflow_run_id}"    >> $Env:GITHUB_OUTPUT
+          $release_target_info_list = (
+            $release_pr_body |
+            Select-String -Pattern '(?m)^\- (?<key>[a-z_]+)\: \[?`(?<value>[^`]+)`\]?.*$' -AllMatches
+          ).Matches
+          $release_info_dict = [System.Collections.Generic.Dictionary[String, String]]::new()
 
-        [string]$artifact_name_nupkg = $null
-        [string]$artifact_digest_nupkg = $null
+          foreach ($pair in $release_target_info_list) {
+            if ( ! $release_info_dict.ContainsKey($pair.Groups['key'].Value) ) {
+              # stores the first value found
+              $release_info_dict[$pair.Groups['key'].Value] = $pair.Groups['value'].Value
+            }
+          }
 
-        if ( $release_info_dict.TryGetValue( "artifact_name_nupkg", [ref] $artifact_name_nupkg ) ) {
-          "| artifact_name_nupkg | ``${artifact_name_nupkg}`` |" >> $Env:GITHUB_STEP_SUMMARY
+          [string]$package_target_tag = $null
+          [string]$package_prevver_tag = $null
+          [string]$package_id = $null
+          [string]$package_id_with_version = $null
+          [string]$package_version = $null
+          [string]$package_branch = $null
+          [string]$release_working_branch = $null
+          [string]$release_tag = $null
+          [string]$release_prerelease = $null
+          [string]$release_draft = $null
+          [string]$release_note_url = $null
 
-          "artifact_name_nupkg=${artifact_name_nupkg}" >> $Env:GITHUB_OUTPUT
-        }
-        else {
+          if ( ! $release_info_dict.TryGetValue( "package_target_tag", [ref]$package_target_tag ) ) {
+            "::error::package_target_tag could not be determined."
+            exit 1
+          }
+          if ( ! $release_info_dict.TryGetValue( "package_prevver_tag", [ref]$package_prevver_tag ) ) {
+            "::warning::package_prevver_tag could not be determined."
+          }
+          if ( ! $release_info_dict.TryGetValue( "package_id", [ref]$package_id ) ) {
+            "::error::package_id could not be determined."
+            exit 1
+          }
+          if ( ! $release_info_dict.TryGetValue( "package_id_with_version", [ref]$package_id_with_version ) ) {
+            "::error::package_id_with_version could not be determined."
+            exit 1
+          }
+          if ( ! $release_info_dict.TryGetValue( "package_version", [ref]$package_version ) ) {
+            "::error::package_version could not be determined."
+            exit 1
+          }
+          if ( ! $release_info_dict.TryGetValue( "package_branch", [ref]$package_branch ) ) {
+            "::error::package_branch could not be determined."
+            exit 1
+          }
+          if ( ! $release_info_dict.TryGetValue( "release_working_branch", [ref]$release_working_branch ) ) {
+            "::error::release_working_branch could not be determined."
+            exit 1
+          }
+          if ( ! $release_info_dict.TryGetValue( "release_tag", [ref]$release_tag ) ) {
+            "::error::release_tag could not be determined."
+            exit 1
+          }
+          if ( ! $release_info_dict.TryGetValue( "release_prerelease", [ref]$release_prerelease ) ) {
+            # if value is not explicitly specified, publish release as a prerelease
+            $release_prerelease = "true"
+          }
+          if ( ! $release_info_dict.TryGetValue( "release_draft", [ref]$release_draft ) ) {
+            # if value is not explicitly specified, publish release as a draft
+            $release_draft = "true"
+          }
+          if ( ! $release_info_dict.TryGetValue( "release_note_url", [ref]$release_note_url ) ) {
+            "::warning::`release_note_url` could not be determined. Release notes may not have been generated."
+          }
+
+          # notice determined info
+          "## :shipit: Release target information" >> $Env:GITHUB_STEP_SUMMARY
           "" >> $Env:GITHUB_STEP_SUMMARY
-          ":warning: No packages will be published." >> $Env:GITHUB_STEP_SUMMARY
-        }
+          "| name | value |" >> $Env:GITHUB_STEP_SUMMARY
+          "| ---- | ----- |" >> $Env:GITHUB_STEP_SUMMARY
+          "| package_target_tag | ``${package_target_tag}`` |"                  >> $Env:GITHUB_STEP_SUMMARY
+          "| package_prevver_tag | ``${package_prevver_tag}`` |"                >> $Env:GITHUB_STEP_SUMMARY
+          "| package_id | ``${package_id}`` |"                                  >> $Env:GITHUB_STEP_SUMMARY
+          "| package_id_with_version | ``${package_id_with_version}`` |"        >> $Env:GITHUB_STEP_SUMMARY
+          "| package_version | ``${package_version}`` |"                        >> $Env:GITHUB_STEP_SUMMARY
+          "| package_branch | ``${package_branch}`` |"                          >> $Env:GITHUB_STEP_SUMMARY
+          "| release_working_branch | ``${release_working_branch}`` |"          >> $Env:GITHUB_STEP_SUMMARY
+          "| release_tag | ``${release_tag}`` |"                                >> $Env:GITHUB_STEP_SUMMARY
+          "| release_prerelease | ``${release_prerelease}`` |"                  >> $Env:GITHUB_STEP_SUMMARY
+          "| release_draft | ``${release_draft}`` |"                            >> $Env:GITHUB_STEP_SUMMARY
+          "| release_note_url | ``${release_note_url}`` |"                      >> $Env:GITHUB_STEP_SUMMARY
+          "| precedent_workflow_run_id | ``${precedent_workflow_run_id}`` |"    >> $Env:GITHUB_STEP_SUMMARY
 
-        if ( $release_info_dict.TryGetValue( "artifact_digest_nupkg", [ref] $artifact_digest_nupkg ) ) {
-          "| artifact_digest_nupkg | ``${artifact_digest_nupkg}`` |" >> $Env:GITHUB_STEP_SUMMARY
+          # set outputs
+          "package_target_tag=${package_target_tag}"                  >> $Env:GITHUB_OUTPUT
+          "package_prevver_tag=${package_prevver_tag}"                >> $Env:GITHUB_OUTPUT
+          "package_id=${package_id}"                                  >> $Env:GITHUB_OUTPUT
+          "package_id_with_version=${package_id_with_version}"        >> $Env:GITHUB_OUTPUT
+          "package_version=${package_version}"                        >> $Env:GITHUB_OUTPUT
+          "package_branch=${package_branch}"                          >> $Env:GITHUB_OUTPUT
+          "release_working_branch=${release_working_branch}"          >> $Env:GITHUB_OUTPUT
+          "release_tag=${release_tag}"                                >> $Env:GITHUB_OUTPUT
+          "release_prerelease=${release_prerelease}"                  >> $Env:GITHUB_OUTPUT
+          "release_draft=${release_draft}"                            >> $Env:GITHUB_OUTPUT
+          "release_note_url=${release_note_url}"                      >> $Env:GITHUB_OUTPUT
+          "precedent_workflow_run_id=${precedent_workflow_run_id}"    >> $Env:GITHUB_OUTPUT
 
-          "artifact_digest_nupkg=${artifact_digest_nupkg}" >> $Env:GITHUB_OUTPUT
-        }
+          [string]$artifact_name_nupkg = $null
+          [string]$artifact_digest_nupkg = $null
 
-        # check working and package branch
-        $ref_names = gh pr view `
-          $env:INPUT_PR_NUMBER_REQUEST_FOR_RELEASE `
-          --repo $env:INPUT_GITHUB_REPOSITORY `
-          --json baseRefName,headRefName `
-          --template '{{.baseRefName}} {{.headRefName}}'
+          if ( $release_info_dict.TryGetValue( "artifact_name_nupkg", [ref] $artifact_name_nupkg ) ) {
+            "| artifact_name_nupkg | ``${artifact_name_nupkg}`` |" >> $Env:GITHUB_STEP_SUMMARY
 
-        $ref_name_base = ($ref_names -split ' ')[0]
-        $ref_name_head = ($ref_names -split ' ')[1]
+            "artifact_name_nupkg=${artifact_name_nupkg}" >> $Env:GITHUB_OUTPUT
+          }
+          else {
+            "" >> $Env:GITHUB_STEP_SUMMARY
+            ":warning: No packages will be published." >> $Env:GITHUB_STEP_SUMMARY
+          }
 
-        if ( $release_working_branch -ne $ref_name_head ) {
-          "::error::expected working branch is '${release_working_branch}' but was '${ref_name_head}'."
-          exit 1
-        }
-        if ( $package_branch -ne $ref_name_base ) {
-          "::error::expected package branch is '${package_branch}' but was '${ref_name_base}'."
-          exit 1
-        }
+          if ( $release_info_dict.TryGetValue( "artifact_digest_nupkg", [ref] $artifact_digest_nupkg ) ) {
+            "| artifact_digest_nupkg | ``${artifact_digest_nupkg}`` |" >> $Env:GITHUB_STEP_SUMMARY
 
-    - name: Wait for publish prerequisite steps
-      wait: [prepare-dotnet-sdk, release-info]
+            "artifact_digest_nupkg=${artifact_digest_nupkg}" >> $Env:GITHUB_OUTPUT
+          }
 
-    - name: Download package ${{ steps.release-info.outputs.artifact_name_nupkg }}
-      id: download-package
-      if: ${{ steps.release-info.outputs.artifact_name_nupkg != '' && steps.release-info.outputs.artifact_digest_nupkg != '' }}
-      shell: pwsh
-      env:
-        GH_TOKEN: ${{ secrets.token_repo }}
-        INPUT_GITHUB_REPOSITORY: ${{ github.repository }}
-        INPUT_ARTIFACT_NAME_NUPKG: ${{ steps.release-info.outputs.artifact_name_nupkg }}
-        INPUT_ARTIFACT_DIGEST_NUPKG: ${{ steps.release-info.outputs.artifact_digest_nupkg }}
-        INPUT_PRECEDENT_WORKFLOW_RUN_ID: ${{ steps.release-info.outputs.precedent_workflow_run_id }}
-      run: |
-        $file_nupkg = $env:INPUT_ARTIFACT_NAME_NUPKG
-        $digest_nupkg_expected = $env:INPUT_ARTIFACT_DIGEST_NUPKG
+          # check working and package branch
+          $ref_names = gh pr view `
+            $env:INPUT_PR_NUMBER_REQUEST_FOR_RELEASE `
+            --repo $env:INPUT_GITHUB_REPOSITORY `
+            --json baseRefName,headRefName `
+            --template '{{.baseRefName}} {{.headRefName}}'
 
-        # ref: https://cli.github.com/manual/gh_run_download
-        $run_download_options = @(
-          '--repo', $env:INPUT_GITHUB_REPOSITORY,
-          $env:INPUT_PRECEDENT_WORKFLOW_RUN_ID,
-          '--name', $env:INPUT_ARTIFACT_NAME_NUPKG,
-          '--dir', '.'
-        )
+          $ref_name_base = ($ref_names -split ' ')[0]
+          $ref_name_head = ($ref_names -split ' ')[1]
 
-        # download the nupkg file generated in the precedent workflow
-        "gh run download ${run_download_options}"
-        gh run download @run_download_options
+          if ( $release_working_branch -ne $ref_name_head ) {
+            "::error::expected working branch is '${release_working_branch}' but was '${ref_name_head}'."
+            exit 1
+          }
+          if ( $package_branch -ne $ref_name_base ) {
+            "::error::expected package branch is '${package_branch}' but was '${ref_name_base}'."
+            exit 1
+          }
 
-        if (Test-Path -Path $file_nupkg -PathType Leaf) {
-          # validate the downloaded nupkg file digest
-          $digest_nupkg_actual = "sha256:" + $(Get-FileHash -Path $file_nupkg -Algorithm SHA256).Hash.ToLower()
+      - name: Wait for publish prerequisite steps
+        wait: [prepare-dotnet-sdk, release-info]
 
-          "## :mag: .nupkg validation" >> $Env:GITHUB_STEP_SUMMARY
-          "" >> $Env:GITHUB_STEP_SUMMARY
-          "| nupkg | digest |" >> $Env:GITHUB_STEP_SUMMARY
-          "| ----- | ------ |" >> $Env:GITHUB_STEP_SUMMARY
-          "| Expected | ``${digest_nupkg_expected}`` |" >> $Env:GITHUB_STEP_SUMMARY
-          "| Actual | ``${digest_nupkg_actual}`` |" >> $Env:GITHUB_STEP_SUMMARY
+      - name: Download package ${{ steps.release-info.outputs.artifact_name_nupkg }}
+        id: download-package
+        if: ${{ steps.release-info.outputs.artifact_name_nupkg != '' && steps.release-info.outputs.artifact_digest_nupkg != '' }}
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.token_repo }}
+          INPUT_GITHUB_REPOSITORY: ${{ github.repository }}
+          INPUT_ARTIFACT_NAME_NUPKG: ${{ steps.release-info.outputs.artifact_name_nupkg }}
+          INPUT_ARTIFACT_DIGEST_NUPKG: ${{ steps.release-info.outputs.artifact_digest_nupkg }}
+          INPUT_PRECEDENT_WORKFLOW_RUN_ID: ${{ steps.release-info.outputs.precedent_workflow_run_id }}
+        run: |
+          $file_nupkg = $env:INPUT_ARTIFACT_NAME_NUPKG
+          $digest_nupkg_expected = $env:INPUT_ARTIFACT_DIGEST_NUPKG
 
-          if ($digest_nupkg_actual -ne $digest_nupkg_expected) {
-            "::error::The digest of the artifact does not match; expected '${digest_nupkg_expected}' but was '${digest_nupkg_actual}'.";
+          # ref: https://cli.github.com/manual/gh_run_download
+          $run_download_options = @(
+            '--repo', $env:INPUT_GITHUB_REPOSITORY,
+            $env:INPUT_PRECEDENT_WORKFLOW_RUN_ID,
+            '--name', $env:INPUT_ARTIFACT_NAME_NUPKG,
+            '--dir', '.'
+          )
+
+          # download the nupkg file generated in the precedent workflow
+          "gh run download ${run_download_options}"
+          gh run download @run_download_options
+
+          if (Test-Path -Path $file_nupkg -PathType Leaf) {
+            # validate the downloaded nupkg file digest
+            $digest_nupkg_actual = "sha256:" + $(Get-FileHash -Path $file_nupkg -Algorithm SHA256).Hash.ToLower()
+
+            "## :mag: .nupkg validation" >> $Env:GITHUB_STEP_SUMMARY
+            "" >> $Env:GITHUB_STEP_SUMMARY
+            "| nupkg | digest |" >> $Env:GITHUB_STEP_SUMMARY
+            "| ----- | ------ |" >> $Env:GITHUB_STEP_SUMMARY
+            "| Expected | ``${digest_nupkg_expected}`` |" >> $Env:GITHUB_STEP_SUMMARY
+            "| Actual | ``${digest_nupkg_actual}`` |" >> $Env:GITHUB_STEP_SUMMARY
+
+            if ($digest_nupkg_actual -ne $digest_nupkg_expected) {
+              "::error::The digest of the artifact does not match; expected '${digest_nupkg_expected}' but was '${digest_nupkg_actual}'.";
+              exit 1;
+            }
+          }
+          else {
+            "::error::The artifact '${env:INPUT_ARTIFACT_NAME_NUPKG}' could not be downloaded.";
             exit 1;
           }
-        }
-        else {
-          "::error::The artifact '${env:INPUT_ARTIFACT_NAME_NUPKG}' could not be downloaded.";
-          exit 1;
-        }
 
-    - name: Configure git identity
-      # needs: steps.checkout-repository
-      # Since this step must be performed within the Git directory,
-      # it must be done after the checkout.
-      run: |
-        git config user.name github-actions
-        git config user.email github-actions@github.com
+      - name: Configure git identity
+        # needs: steps.checkout-repository
+        # Since this step must be performed within the Git directory,
+        # it must be done after the checkout.
+        run: |
+          git config user.name github-actions
+          git config user.email github-actions@github.com
 
-        # TODO
-        # git config user.name '${{ github.repository_owner }}'
-        # git config user.email '<>'
+          # TODO
+          # git config user.name '${{ github.repository_owner }}'
+          # git config user.email '<>'
 
-    - name: Publish package ${{ steps.release-info.outputs.artifact_name_nupkg }} to nuget.org
-      id: push-nuget-org
-      background: true
-      if: ${{ !inputs.dry_run && env.NUGET_APIKEY != null && steps.release-info.outputs.artifact_name_nupkg != '' }}
-      shell: pwsh
-      env:
-        NUGET_APIKEY: ${{ secrets.token_push_nuget_org }}
-        NUGET_SOURCE: 'https://api.nuget.org/v3/index.json'
-        INPUT_ARTIFACT_NAME_NUPKG: ${{ steps.release-info.outputs.artifact_name_nupkg }}
-      run: |
-        dotnet nuget push `
-          --api-key $env:NUGET_APIKEY `
-          --source $env:NUGET_SOURCE `
-          --skip-duplicate `
-          $env:INPUT_ARTIFACT_NAME_NUPKG
+      - name: Publish package ${{ steps.release-info.outputs.artifact_name_nupkg }} to nuget.org
+        id: push-nuget-org
+        background: true
+        if: ${{ !inputs.dry_run && env.NUGET_APIKEY != null && steps.release-info.outputs.artifact_name_nupkg != '' }}
+        shell: pwsh
+        env:
+          NUGET_APIKEY: ${{ secrets.token_push_nuget_org }}
+          NUGET_SOURCE: "https://api.nuget.org/v3/index.json"
+          INPUT_ARTIFACT_NAME_NUPKG: ${{ steps.release-info.outputs.artifact_name_nupkg }}
+        run: |
+          dotnet nuget push `
+            --api-key $env:NUGET_APIKEY `
+            --source $env:NUGET_SOURCE `
+            --skip-duplicate `
+            $env:INPUT_ARTIFACT_NAME_NUPKG
 
-        "pushed=true" >> $Env:GITHUB_OUTPUT
+          "pushed=true" >> $Env:GITHUB_OUTPUT
 
-        "## :package: nuget.org" >> $Env:GITHUB_STEP_SUMMARY
-        "The package '${env:INPUT_ARTIFACT_NAME_NUPKG}' was pushed to '${env:NUGET_SOURCE}' successfully." >> $Env:GITHUB_STEP_SUMMARY
+          "## :package: nuget.org" >> $Env:GITHUB_STEP_SUMMARY
+          "The package '${env:INPUT_ARTIFACT_NAME_NUPKG}' was pushed to '${env:NUGET_SOURCE}' successfully." >> $Env:GITHUB_STEP_SUMMARY
 
-    - name: Publish package ${{ steps.release-info.outputs.artifact_name_nupkg }} to GitHub packages
-      id: push-github-packages
-      background: true
-      if: ${{ !inputs.dry_run && env.NUGET_APIKEY != null && steps.release-info.outputs.artifact_name_nupkg != '' }}
-      shell: pwsh
-      env:
-        NUGET_APIKEY: ${{ secrets.token_push_github_packages }}
-        INPUT_GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
-        INPUT_ARTIFACT_NAME_NUPKG: ${{ steps.release-info.outputs.artifact_name_nupkg }}
-      run: |
-        $NUGET_SOURCE = "https://nuget.pkg.github.com/${env:INPUT_GITHUB_REPOSITORY_OWNER}/index.json"
+      - name: Publish package ${{ steps.release-info.outputs.artifact_name_nupkg }} to GitHub packages
+        id: push-github-packages
+        background: true
+        if: ${{ !inputs.dry_run && env.NUGET_APIKEY != null && steps.release-info.outputs.artifact_name_nupkg != '' }}
+        shell: pwsh
+        env:
+          NUGET_APIKEY: ${{ secrets.token_push_github_packages }}
+          INPUT_GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
+          INPUT_ARTIFACT_NAME_NUPKG: ${{ steps.release-info.outputs.artifact_name_nupkg }}
+        run: |
+          $NUGET_SOURCE = "https://nuget.pkg.github.com/${env:INPUT_GITHUB_REPOSITORY_OWNER}/index.json"
 
-        dotnet nuget push `
-          --api-key $env:NUGET_APIKEY `
-          --source $NUGET_SOURCE `
-          --skip-duplicate `
-          $env:INPUT_ARTIFACT_NAME_NUPKG
+          dotnet nuget push `
+            --api-key $env:NUGET_APIKEY `
+            --source $NUGET_SOURCE `
+            --skip-duplicate `
+            $env:INPUT_ARTIFACT_NAME_NUPKG
 
-        "pushed=true" >> $Env:GITHUB_OUTPUT
+          "pushed=true" >> $Env:GITHUB_OUTPUT
 
-        "## :package: GitHub packages" >> $Env:GITHUB_STEP_SUMMARY
-        "The package '${env:INPUT_ARTIFACT_NAME_NUPKG}' was pushed to '${NUGET_SOURCE}' successfully." >> $Env:GITHUB_STEP_SUMMARY
+          "## :package: GitHub packages" >> $Env:GITHUB_STEP_SUMMARY
+          "The package '${env:INPUT_ARTIFACT_NAME_NUPKG}' was pushed to '${NUGET_SOURCE}' successfully." >> $Env:GITHUB_STEP_SUMMARY
 
-    - name: Wait for pushing packages
-      wait: [push-nuget-org, push-github-packages]
+      - name: Wait for pushing packages
+        wait: [push-nuget-org, push-github-packages]
 
-    - name: Delete package ${{ steps.release-info.outputs.artifact_name_nupkg }}
-      if: ${{ steps.release-info.outputs.artifact_name_nupkg != '' }}
-      shell: pwsh
-      env:
-        INPUT_ARTIFACT_NAME_NUPKG: ${{ steps.release-info.outputs.artifact_name_nupkg }}
-      run: |
-        rm -f $env:INPUT_ARTIFACT_NAME_NUPKG
+      - name: Delete package ${{ steps.release-info.outputs.artifact_name_nupkg }}
+        if: ${{ steps.release-info.outputs.artifact_name_nupkg != '' }}
+        shell: pwsh
+        env:
+          INPUT_ARTIFACT_NAME_NUPKG: ${{ steps.release-info.outputs.artifact_name_nupkg }}
+        run: |
+          rm -f $env:INPUT_ARTIFACT_NAME_NUPKG
 
-    - name: Create release tag ${{ steps.release-info.outputs.release_tag }}
-      shell: pwsh
-      env:
-        GH_TOKEN: ${{ secrets.token_repo }}
-        INPUT_DRY_RUN: ${{ inputs.dry_run == true }}
-        INPUT_RELEASE_TAG: ${{ steps.release-info.outputs.release_tag }}
-        INPUT_PACKAGE_BRANCH: ${{ steps.release-info.outputs.package_branch }}
-        INPUT_PACKAGE_ID_WITH_VERSION: ${{ steps.release-info.outputs.package_id_with_version }}
-        INPUT_PR_NUMBER_REQUEST_FOR_RELEASE: ${{ inputs.pr_number_request_for_release }}
-        INPUT_GITHUB_REPOSITORY: ${{ github.repository }}
-      run: |
-        $dry_run = $env:INPUT_DRY_RUN -ieq 'true'
-        $tag_name = $env:INPUT_RELEASE_TAG
-        $tag_message = "${env:INPUT_PACKAGE_BRANCH}/${env:INPUT_PACKAGE_ID_WITH_VERSION}"
-        $head_commit = git rev-parse HEAD
+      - name: Create release tag ${{ steps.release-info.outputs.release_tag }}
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.token_repo }}
+          INPUT_DRY_RUN: ${{ inputs.dry_run == true }}
+          INPUT_RELEASE_TAG: ${{ steps.release-info.outputs.release_tag }}
+          INPUT_PACKAGE_BRANCH: ${{ steps.release-info.outputs.package_branch }}
+          INPUT_PACKAGE_ID_WITH_VERSION: ${{ steps.release-info.outputs.package_id_with_version }}
+          INPUT_PR_NUMBER_REQUEST_FOR_RELEASE: ${{ inputs.pr_number_request_for_release }}
+          INPUT_GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          $dry_run = $env:INPUT_DRY_RUN -ieq 'true'
+          $tag_name = $env:INPUT_RELEASE_TAG
+          $tag_message = "${env:INPUT_PACKAGE_BRANCH}/${env:INPUT_PACKAGE_ID_WITH_VERSION}"
+          $head_commit = git rev-parse HEAD
 
-        # get merge commit for the release PR
-        $target_commit = gh pr view `
-          $env:INPUT_PR_NUMBER_REQUEST_FOR_RELEASE `
-          --repo $env:INPUT_GITHUB_REPOSITORY `
-          --json mergeCommit `
-          --template '{{.mergeCommit.oid}}'
+          # get merge commit for the release PR
+          $target_commit = gh pr view `
+            $env:INPUT_PR_NUMBER_REQUEST_FOR_RELEASE `
+            --repo $env:INPUT_GITHUB_REPOSITORY `
+            --json mergeCommit `
+            --template '{{.mergeCommit.oid}}'
 
-        if ( $target_commit ) {
-          if ( $head_commit -ne $target_commit) {
-            "::warning::will set tag to the non-HEAD commit (HEAD: ${head_commit}, release: ${target_commit})"
+          if ( $target_commit ) {
+            if ( $head_commit -ne $target_commit) {
+              "::warning::will set tag to the non-HEAD commit (HEAD: ${head_commit}, release: ${target_commit})"
 
-            # fetch all log to refer the target commit
-            git fetch --unshallow --progress --no-tags
+              # fetch all log to refer the target commit
+              git fetch --unshallow --progress --no-tags
+            }
           }
-        }
-        else {
-          "::warning::could not get merge commit, refers HEAD instead"
+          else {
+            "::warning::could not get merge commit, refers HEAD instead"
 
-          $target_commit = $head_commit
-        }
+            $target_commit = $head_commit
+          }
 
-        $release_tag_options = @(
-          '--annotate',
-          '--message', $tag_message,
-          $tag_name,
-          $target_commit
-        )
+          $release_tag_options = @(
+            '--annotate',
+            '--message', $tag_message,
+            $tag_name,
+            $target_commit
+          )
 
-        "git tag ${release_tag_options}"
-        git tag $release_tag_options
+          "git tag ${release_tag_options}"
+          git tag $release_tag_options
 
-        if (-not $dry_run) {
-          git push origin $tag_name
-        }
+          if (-not $dry_run) {
+            git push origin $tag_name
+          }
 
-    - parallel:
-      - name: Delete release target tag ${{ steps.release-info.outputs.package_target_tag }}
-        if: ${{ !inputs.dry_run }}
-        env:
-          INPUT_PACKAGE_TARGET_TAG: ${{ steps.release-info.outputs.package_target_tag }}
-        run: git push origin --delete "$INPUT_PACKAGE_TARGET_TAG" || true
+      - parallel:
+          - name: Delete release target tag ${{ steps.release-info.outputs.package_target_tag }}
+            if: ${{ !inputs.dry_run }}
+            env:
+              INPUT_PACKAGE_TARGET_TAG: ${{ steps.release-info.outputs.package_target_tag }}
+            run: git push origin --delete "$INPUT_PACKAGE_TARGET_TAG" || true
 
-      - name: Close release working branch ${{ steps.release-info.outputs.release_working_branch }}
-        if: ${{ !inputs.dry_run }}
-        env:
-          INPUT_RELEASE_WORKING_BRANCH: ${{ steps.release-info.outputs.release_working_branch }}
-        run: git push origin --delete "$INPUT_RELEASE_WORKING_BRANCH" || true
+          - name: Close release working branch ${{ steps.release-info.outputs.release_working_branch }}
+            if: ${{ !inputs.dry_run }}
+            env:
+              INPUT_RELEASE_WORKING_BRANCH: ${{ steps.release-info.outputs.release_working_branch }}
+            run: git push origin --delete "$INPUT_RELEASE_WORKING_BRANCH" || true
 
   publish-release:
     name: Publish release for '${{ needs.publish-release-target.outputs.release_tag }}'
