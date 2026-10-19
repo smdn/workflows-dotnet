@@ -475,7 +475,7 @@ jobs:
 
   publish-release:
     name: Publish release for '${{ needs.publish-release-target.outputs.release_tag }}'
-    uses: smdn/workflows-dotnet/.github/workflows/publish-release.yml@b411e2753bf628a8299b53887026a09d31145d1b # release-note/v1.1.2
+    uses: $/.github/workflows/publish-release.yml
     permissions:
       contents: write
     needs: publish-release-target
