@@ -416,9 +416,7 @@ jobs:
           INPUT_PATH_TO_TEST_PROJECT: ${{ matrix.project.PathToTestProject }}
         run: |
           # build the options for `dotnet restore`
-          $dotnet_restore_options = @(
-            '--nologo'
-          )
+          $dotnet_restore_options = @()
 
           if ( ! [string]::IsNullOrEmpty( $env:INPUT_EXTRA_OPTIONS_COMMON ) ) {
             $dotnet_restore_options += @( $env:INPUT_EXTRA_OPTIONS_COMMON )

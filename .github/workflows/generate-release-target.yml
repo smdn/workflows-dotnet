@@ -318,7 +318,6 @@ jobs:
           INPUT_PACKAGE_SOURCE_DIR: ${{ steps.package-info.outputs.package_source_dir }}
         run: |
           dotnet restore `
-            --nologo `
             $env:INPUT_PACKAGE_SOURCE_DIR
 
       - name: Build ${{ steps.package-info.outputs.package_id }}
