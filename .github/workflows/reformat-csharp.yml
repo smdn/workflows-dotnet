@@ -1,0 +1,502 @@
+# SPDX-License-Identifier: MIT
+# SPDX-FileCopyrightText: "2026 smdn <smdn@smdn.jp>"
+#cSpell:ignore pullrequest,safecrlf,LASTEXITCODE
+
+name: Reformat C# files (reusable workflow)
+
+permissions: {}
+
+on:
+  workflow_call:
+    inputs:
+      project:
+        description: "The project name to perform `dotnet format` on."
+        required: false
+        type: string
+
+      workflow_runs_on:
+        description: "The OS label which run the workflow on. (ubuntu-latest, ubuntu-24.04, ubuntu-22.04, etc.)"
+        required: false
+        type: string
+        default: "ubuntu-latest"
+
+      path_prefix_source:
+        description: "The common prefix of the path to projects' root directory based on the repository root."
+        required: false
+        type: string
+        default: "src/"
+
+      path_global_json:
+        description: "The path to the 'global.json' file that configures the .NET SDK version and dependencies."
+        required: false
+        type: string
+        default: "global.json"
+
+      timeout_minutes_format:
+        description: "The timeout minutes for each `dotnet format` jobs."
+        required: false
+        type: number
+        default: 3
+
+      extra_options_common:
+        description: "The common extra options to be set on running the `dotnet restore/format` command."
+        required: false
+        type: string
+        default: ""
+
+      dotnet_format_options_verbosity_level:
+        # cSpell:disable-next-line
+        description: "The argument to be set to the `--verbosity <LEVEL>` option of the `dotnet format` command. <LEVEL> := q[uiet], m[inimal], n[ormal], d[etailed], diag[nostic]"
+        required: false
+        type: string
+        default: ""
+
+      dotnet_format_options_severity_level:
+        description: "The argument to be set to the `--severity <LEVEL>` option of the `dotnet format` command. <LEVEL> := error, hidden, info, warn"
+        required: false
+        type: string
+        default: ""
+
+      dry_run:
+        description: "If true, performs a trial run."
+        required: false
+        type: boolean
+        default: false
+
+      verbose:
+        description: "If true, enables verbose output."
+        required: false
+        type: boolean
+        default: false
+
+    secrets:
+      token_repo:
+        description: "The token which is used to checkout code."
+        required: true
+
+      token_pullrequest:
+        description: "The token which is used to open a pull request for the new release."
+        required: true
+
+env:
+  # cSpell:disable
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  DOTNET_NOLOGO: true
+  MSBUILDTERMINALLOGGER: off
+  # cSpell:enable
+
+jobs:
+  setup:
+    name: Set up
+    runs-on: ubuntu-slim
+    permissions:
+      contents: read
+    timeout-minutes: 2
+    outputs:
+      test-projects: ${{ steps.projects.outputs.projects }}
+      required-dotnet-sdk-version: ${{ steps.required-dotnet-sdk-version.outputs.version }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          token: ${{ secrets.token_repo }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Determine target projects
+        id: projects
+        background: true
+        shell: pwsh
+        env:
+          INPUT_VERBOSE: ${{ inputs.verbose == true }}
+          INPUT_PATH_PREFIX_SOURCE: ${{ inputs.path_prefix_source }}
+          INPUT_PROJECT: ${{ inputs.project }}
+        run: |
+          $verbose = $env:INPUT_VERBOSE -ieq 'true'
+          $directory_src = [System.IO.Path]::Join($env:GITHUB_WORKSPACE, $env:INPUT_PATH_PREFIX_SOURCE)
+
+          # find all project from directories which contains the file named '*.csproj'
+          $projects = Get-ChildItem -Path "${directory_src}/*/*.csproj" -File | `
+            select `
+              @{
+                Name = 'Name'
+                Expression = {$_.Directory.Name}
+              },
+              @{
+                Name = 'PathToProject'
+                Expression = {[System.IO.Path]::GetRelativePath($env:GITHUB_WORKSPACE, $_.FullName)}
+              }
+
+          if ( ! [string]::IsNullOrEmpty( $env:INPUT_PROJECT ) ) {
+            $projects = $projects | where Name -eq $env:INPUT_PROJECT
+          }
+
+          '### Target project'  >> $Env:GITHUB_STEP_SUMMARY
+          ''                    >> $Env:GITHUB_STEP_SUMMARY
+          '|Name|Project path|' >> $Env:GITHUB_STEP_SUMMARY
+          '|----|------------|' >> $Env:GITHUB_STEP_SUMMARY
+
+          foreach ($proj in $projects) {
+            "|``$($proj.'Name')``|``$($proj.'PathToProject')``|" >> $Env:GITHUB_STEP_SUMMARY
+
+            if ( $verbose ) {
+              "::notice::Target project: $($proj.'Name') ($($proj.'PathToProject'))"
+            }
+          }
+
+          $output_json = $projects | ConvertTo-Json -Compress
+          $output_json
+
+          "projects=${output_json}" >> $Env:GITHUB_OUTPUT
+
+      - name: Determine required .NET SDK version
+        id: required-dotnet-sdk-version
+        background: true
+        shell: pwsh
+        env:
+          INPUT_PATH_GLOBAL_JSON: ${{ inputs.path_global_json }}
+        run: |
+          $path_to_global_json = $null
+
+          if (![string]::IsNullOrEmpty($env:INPUT_PATH_GLOBAL_JSON)) {
+            $path_to_global_json = [System.IO.Path]::Join($env:GITHUB_WORKSPACE, $env:INPUT_PATH_GLOBAL_JSON)
+          }
+
+          # get required SDK version specified in 'global.json'
+          if (
+            ![string]::IsNullOrEmpty($path_to_global_json) -and
+            (Test-Path -LiteralPath $path_to_global_json -PathType Leaf)
+          ) {
+            $sdk_version = jq -c -r ".sdk.version" $path_to_global_json
+
+            "version=${sdk_version}" >> $Env:GITHUB_OUTPUT
+          }
+          else {
+            "version=" >> $Env:GITHUB_OUTPUT
+          }
+
+      - name: Wait for step outputs
+        wait-all:
+
+  reformat-csharp:
+    name: Reformat C# files in ${{ matrix.project.Name }}
+    needs: [setup]
+    permissions:
+      contents: write
+      pull-requests: write
+    timeout-minutes: ${{ fromJson(inputs.timeout_minutes_format) }}
+    runs-on: ${{ inputs.workflow_runs_on }}
+    strategy:
+      fail-fast: false
+      matrix:
+        project:
+          - ${{ fromJson(needs.setup.outputs.test-projects) }}
+
+    steps:
+      - name: &prepare-dotnet-sdk-name Prepare .NET SDK ${{ needs.setup.outputs.required-dotnet-sdk-version }}
+        id: prepare-dotnet-sdk
+        if: runner.os != 'Windows'
+        background: true
+        uses: &prepare-dotnet-sdk-action smdn/workflows-dotnet/actions/prepare-dotnet-sdk@ca77c33b60b27d8734f7e7cc02f97a9b274c6779 # actions/prepare-dotnet-sdk/v1.3.0
+        with: &prepare-dotnet-sdk-action-params
+          minimal_dotnet_sdk_version: "${{ needs.setup.outputs.required-dotnet-sdk-version }}"
+
+      - name: *prepare-dotnet-sdk-name
+        id: prepare-dotnet-sdk-non-background
+        # Workaround: Run synchronously on Windows to avoid OS-specific file locking conflicts (sharing violations).
+        # Since 'background' does not accept expressions (${{ ... }}), YAML anchors are used to reuse configurations across split steps.
+        if: runner.os == 'Windows'
+        uses: *prepare-dotnet-sdk-action
+        with: *prepare-dotnet-sdk-action-params
+
+      - name: Configure git
+        run: |
+          git config --global core.autocrlf input
+          git config --global core.safecrlf true
+          git config --global core.ignorecase false
+
+      - name: &checkout-repository-name Checkout repository
+        id: checkout-repository
+        if: runner.os != 'Windows'
+        background: true
+        uses: &checkout-repository-action actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: &checkout-repository-action-params
+          token: ${{ secrets.token_repo }}
+          fetch-depth: 1
+          persist-credentials: true # required to `git push`
+
+      - name: *checkout-repository-name
+        id: checkout-repository-non-background
+        # Workaround: Run synchronously on Windows to avoid OS-specific file locking conflicts (sharing violations).
+        # Since 'background' does not accept expressions (${{ ... }}), YAML anchors are used to reuse configurations across split steps.
+        if: runner.os == 'Windows'
+        uses: *checkout-repository-action
+        with: *checkout-repository-action-params
+
+      - name: Set NUGET_PACKAGES
+        id: set-nuget-packages
+        shell: pwsh
+        env:
+          INPUT_VERBOSE: ${{ inputs.verbose == true }}
+        run: |
+          $verbose = $env:INPUT_VERBOSE -ieq 'true'
+          $path_to_nuget_packages =[System.IO.Path]::Combine(
+            $env:GITHUB_WORKSPACE,
+            '.nuget',
+            'packages'
+          )
+
+          if ( $verbose ) {
+            "::notice::NUGET_PACKAGES=${path_to_nuget_packages}"
+          }
+
+          $cache_key_suffix = [System.String]::Concat(
+            $([System.Globalization.ISOWeek]::GetYear([System.DateTime]::Now)),
+            '-W',
+            $([System.Globalization.ISOWeek]::GetWeekOfYear([System.DateTime]::Now))
+          )
+
+          "NUGET_PACKAGES=${path_to_nuget_packages}" >> $Env:GITHUB_ENV
+          "path-to-nuget-packages=${path_to_nuget_packages}" >> $Env:GITHUB_OUTPUT
+          "cache-key-suffix=${cache_key_suffix}" >> $Env:GITHUB_OUTPUT
+
+      - name: &setup-nuget-cache-name Setup NuGet cache
+        id: setup-nuget-cache
+        if: runner.os != 'Windows'
+        background: true
+        # ref: https://github.com/actions/cache/blob/master/examples.md#c---nuget
+        uses: &setup-nuget-cache-action actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        env: &setup-nuget-cache-envvars
+          SEGMENT_DOWNLOAD_TIMEOUT_MINS: 5
+        with: &setup-nuget-cache-action-params
+          path: ${{ steps.set-nuget-packages.outputs.path-to-nuget-packages }}
+          key: reformat-csharp-NuGetPackages-${{ runner.os }}-${{ steps.set-nuget-packages.outputs.cache-key-suffix }}
+          restore-keys: reformat-csharp-NuGetPackages-${{ runner.os }}
+
+      - name: *setup-nuget-cache-name
+        id: setup-nuget-cache-non-background
+        # Workaround: Run synchronously on Windows to avoid OS-specific file locking conflicts (sharing violations).
+        # Since 'background' does not accept expressions (${{ ... }}), YAML anchors are used to reuse configurations across split steps.
+        if: runner.os == 'Windows'
+        uses: *setup-nuget-cache-action
+        env: *setup-nuget-cache-envvars
+        with: *setup-nuget-cache-action-params
+
+      - name: Wait for prerequisite steps
+        wait: [prepare-dotnet-sdk, checkout-repository, setup-nuget-cache]
+
+      - name: Restore dependencies of ${{ matrix.project.Name }}
+        shell: pwsh
+        env:
+          INPUT_EXTRA_OPTIONS_COMMON: ${{ inputs.extra_options_common }}
+          INPUT_PATH_TO_PROJECT: ${{ matrix.project.PathToProject }}
+        run: |
+          # build the options for `dotnet restore`
+          $dotnet_restore_options = @()
+
+          if ( ! [string]::IsNullOrEmpty( $env:INPUT_EXTRA_OPTIONS_COMMON ) ) {
+            $dotnet_restore_options += @( $env:INPUT_EXTRA_OPTIONS_COMMON )
+          }
+
+          $dotnet_restore_options += @( $env:INPUT_PATH_TO_PROJECT )
+
+          "dotnet restore ${dotnet_restore_options}"
+          dotnet restore @dotnet_restore_options
+
+      - name: Perform `dotnet format` on ${{ matrix.project.Name }}
+        id: perform-dotnet-format
+        shell: pwsh
+        env:
+          INPUT_VERBOSE: ${{ inputs.verbose == true }}
+          INPUT_DOTNET_FORMAT_OPTIONS_VERBOSITY_LEVEL: ${{ inputs.dotnet_format_options_verbosity_level }}
+          INPUT_DOTNET_FORMAT_OPTIONS_SEVERITY_LEVEL: ${{ inputs.dotnet_format_options_severity_level }}
+          INPUT_EXTRA_OPTIONS_COMMON: ${{ inputs.extra_options_common }}
+          INPUT_PATH_TO_PROJECT: ${{ matrix.project.PathToProject }}
+        run: |
+          $verbose = $env:INPUT_VERBOSE -ieq 'true'
+          $path_to_log = [System.IO.Path]::GetFullPath('dotnet-format.log')
+          $option_verbosity_level = $env:INPUT_DOTNET_FORMAT_OPTIONS_VERBOSITY_LEVEL
+
+          if ([string]::IsNullOrEmpty($option_verbosity_level)) {
+            $option_verbosity_level = 'minimal' # default verbosity level
+          }
+
+          $option_severity_level = $env:INPUT_DOTNET_FORMAT_OPTIONS_SEVERITY_LEVEL
+
+          if ([string]::IsNullOrEmpty($option_severity_level)) {
+            $option_severity_level = 'warn' # default severity level
+          }
+
+          # build the options for `dotnet format`
+          $dotnet_format_options = @(
+            $env:INPUT_PATH_TO_PROJECT,
+            '--no-restore',
+            '--verbosity', $option_verbosity_level,
+            '--severity', $option_severity_level
+          )
+
+          if ( ! [string]::IsNullOrEmpty( $env:INPUT_EXTRA_OPTIONS_COMMON ) ) {
+            $dotnet_format_options += @( $env:INPUT_EXTRA_OPTIONS_COMMON )
+          }
+
+          "dotnet format ${dotnet_format_options} 2>&1 | Tee-Object -FilePath ${path_to_log}"
+          dotnet format @dotnet_format_options 2>&1 | Tee-Object -FilePath $path_to_log
+
+          "path_to_log=${path_to_log}" >> $Env:GITHUB_OUTPUT
+
+          if ( $verbose ) {
+            "::notice::Log filed was saved to '${path_to_log}'"
+          }
+
+      - name: Configure git identity
+        # needs: steps.checkout-repository
+        # Since this step must be performed within the Git directory,
+        # it must be done after the checkout.
+        if: inputs.dry_run != true
+        run: |
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+
+          # TODO
+          # git config user.name '${{ github.repository_owner }}'
+          # git config user.email '<>'
+
+      - name: Create pull request
+        id: pullrequest
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.token_pullrequest }}
+          INPUT_DRY_RUN: ${{ inputs.dry_run == true }}
+          INPUT_VERBOSE: ${{ inputs.verbose == true }}
+          INPUT_PROJECT_NAME: ${{ matrix.project.Name }}
+          INPUT_PATH_TO_PROJECT: ${{ matrix.project.PathToProject }}
+          INPUT_BASE_BRANCH: ${{ github.ref_name }}
+          INPUT_GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
+          INPUT_PATH_TO_DOTNET_FORMAT_LOG: ${{ steps.perform-dotnet-format.outputs.path_to_log }}
+        run: |
+          $dry_run = $env:INPUT_DRY_RUN -ieq 'true'
+          $verbose = $env:INPUT_VERBOSE -ieq 'true'
+          $pr_title = "${env:INPUT_PROJECT_NAME}: Reformat C# files";
+          $pr_body_file = [System.IO.Path]::GetFullPath('pr-body.md');
+          $path_to_project_dir = Split-Path -Parent $env:INPUT_PATH_TO_PROJECT
+          $path_to_dotnet_format_log = $env:INPUT_PATH_TO_DOTNET_FORMAT_LOG
+          $timestamp = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+          $working_branch_name = "fix-format/$env:INPUT_PROJECT_NAME-$timestamp"
+
+          #
+          # 1. Stage only the *.cs files in the project directory
+          #
+          Get-ChildItem -Path $path_to_project_dir -Filter "*.cs" -Recurse | ForEach-Object {
+            $source_file = $_.FullName
+
+            # Avoid attempting to use `git add` unless the file is listed in `.gitignore`
+            git check-ignore -q $source_file
+
+            if ( $LASTEXITCODE -ne 0 ) {
+              git add $source_file
+            }
+          }
+
+          #
+          # 2. Check for staged changes (format differences in .cs files)
+          #
+          git diff --cached --quiet
+
+          if ( $LASTEXITCODE -eq 0 ) {
+            $message_no_changes = "No formatting changes found for .cs files in ${path_to_project_dir}."
+
+            "::notice::${message_no_changes}"
+
+            $message_no_changes >> $Env:GITHUB_STEP_SUMMARY
+
+            exit 0
+          }
+
+          #
+          # 3. Commit the changes to the working branch and push to the remote repository
+          #
+          git checkout -b $working_branch_name
+
+          if ( $dry_run ) {
+            "Staged changes to $env:INPUT_PATH_TO_PROJECT"
+            "=================================================================="
+            git --no-pager diff --staged
+            "=================================================================="
+          }
+          else {
+            git commit -m "Reformat C# files in ${env:INPUT_PROJECT_NAME}"
+            git push origin $working_branch_name
+          }
+
+          #
+          # 4. Construct the pull request body
+          #
+          $pr_body = [System.Text.StringBuilder]::new(4096)
+
+          [void]$pr_body.AppendLine("Automated code formatting changes applied by ``dotnet format`` for ``$env:INPUT_PATH_TO_PROJECT``.")
+          [void]$pr_body.AppendLine()
+          [void]$pr_body.AppendLine('<details>')
+          [void]$pr_body.AppendLine('<summary><code>dotnet format</code> log</summary>')
+          [void]$pr_body.AppendLine()
+
+          if ( Test-Path -Path $path_to_dotnet_format_log -PathType Leaf ) {
+            if ( $verbose ) {
+              "::notice::Get content from the log file '${path_to_dotnet_format_log}'."
+            }
+
+            $dotnet_format_log = Get-Content $path_to_dotnet_format_log -Raw
+
+            [void]$pr_body.AppendLine('```')
+            [void]$pr_body.Append($dotnet_format_log)
+            [void]$pr_body.AppendLine('```')
+          }
+          else {
+            "::warning::Log file '${path_to_dotnet_format_log}' not generated."
+          }
+
+          [void]$pr_body.AppendLine()
+          [void]$pr_body.AppendLine('</details>')
+          [void]$pr_body.AppendLine()
+          [void]$pr_body.AppendLine("This PR was automatically created by workflow run [${env:GITHUB_RUN_ID}](${env:GITHUB_SERVER_URL}/${env:GITHUB_REPOSITORY}/actions/runs/${env:GITHUB_RUN_ID}).")
+
+          if ( $dry_run ) {
+            "=================================================================="
+            $pr_body.ToString()
+            "=================================================================="
+          }
+          else {
+            Out-File -FilePath $pr_body_file -Encoding utf8 -InputObject $pr_body.ToString()
+          }
+
+          #
+          # 5.Create a pull request
+          # ref: https://cli.github.com/manual/gh_pr_create
+          #
+          $pr_create_options = @(
+            '--base', $env:INPUT_BASE_BRANCH,
+            '--head', $working_branch_name,
+            '--assignee', $env:INPUT_GITHUB_REPOSITORY_OWNER,
+            '--title', $pr_title,
+            '--body-file', $pr_body_file
+          )
+
+          $pr_url = $null
+
+          "gh pr create ${pr_create_options}"
+
+          $pr_url = $dry_run `
+            ? '(dry-run)' `
+            : $(gh pr create $pr_create_options)
+
+          if ( [string]::IsNullOrEmpty($pr_url) ) {
+            "::error::Could not create a new pull request."
+            exit 1
+          }
+
+          # set outputs
+          if (-not $dry_run) {
+            "url=${pr_url}" >> $Env:GITHUB_OUTPUT
+          }
+
+          "Created pull request: [${pr_title}](${pr_url})" >> $Env:GITHUB_STEP_SUMMARY
