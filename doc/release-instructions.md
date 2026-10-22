@@ -17,6 +17,7 @@ gh release create --generate-notes --draft --notes-start-tag test/v<prev> test/v
 gh release create --generate-notes --draft --notes-start-tag nuget/v<prev> nuget/vX.Y.Z
 gh release create --generate-notes --draft --notes-start-tag release-target/v<prev> release-target/vX.Y.Z
 gh release create --generate-notes --draft --notes-start-tag release-note/v<prev> release-note/vX.Y.Z
+gh release create --generate-notes --draft --notes-start-tag reformat-csharp/v<prev> reformat-csharp/vX.Y.Z
 gh release create --generate-notes --draft --notes-start-tag actions/prepare-dotnet-sdk/v<prev> actions/prepare-dotnet-sdk/vX.Y.Z
 ```
 
