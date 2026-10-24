@@ -473,11 +473,6 @@ jobs:
           [void]$pr_body.AppendLine("Automated code formatting changes applied by ``dotnet format`` for ``$env:INPUT_PATH_TO_PROJECT``.")
 
           # --- `dotnet format` log ---
-          [void]$pr_body.AppendLine()
-          [void]$pr_body.AppendLine('<details>')
-          [void]$pr_body.AppendLine('<summary><code>dotnet format</code> log</summary>')
-          [void]$pr_body.AppendLine()
-
           if ( Test-Path -Path $path_to_dotnet_format_log -PathType Leaf ) {
             if ( $verbose ) {
               "::notice::Get content from the log file '${path_to_dotnet_format_log}'."
@@ -485,23 +480,21 @@ jobs:
 
             $dotnet_format_log = Get-Content $path_to_dotnet_format_log -Raw
 
+            [void]$pr_body.AppendLine()
+            [void]$pr_body.AppendLine('<details>')
+            [void]$pr_body.AppendLine('<summary><code>dotnet format</code> log</summary>')
+            [void]$pr_body.AppendLine()
             [void]$pr_body.AppendLine('```')
             [void]$pr_body.Append($dotnet_format_log)
             [void]$pr_body.AppendLine('```')
+            [void]$pr_body.AppendLine()
+            [void]$pr_body.AppendLine('</details>')
           }
           else {
             "::notice::Log file '${path_to_dotnet_format_log}' not generated."
           }
 
-          [void]$pr_body.AppendLine()
-          [void]$pr_body.AppendLine('</details>')
-
           # --- `dotnet build` log ---
-          [void]$pr_body.AppendLine()
-          [void]$pr_body.AppendLine('<details>')
-          [void]$pr_body.AppendLine('<summary><code>dotnet build</code> log</summary>')
-          [void]$pr_body.AppendLine()
-
           if ( Test-Path -Path $path_to_dotnet_build_log -PathType Leaf ) {
             if ( $verbose ) {
               "::notice::Get content from the log file '${path_to_dotnet_build_log}'."
@@ -509,16 +502,19 @@ jobs:
 
             $dotnet_build_log = Get-Content $path_to_dotnet_build_log -Raw
 
+            [void]$pr_body.AppendLine()
+            [void]$pr_body.AppendLine('<details>')
+            [void]$pr_body.AppendLine('<summary><code>dotnet build</code> log</summary>')
+            [void]$pr_body.AppendLine()
             [void]$pr_body.AppendLine('```')
             [void]$pr_body.Append($dotnet_build_log)
             [void]$pr_body.AppendLine('```')
+            [void]$pr_body.AppendLine()
+            [void]$pr_body.AppendLine('</details>')
           }
           else {
             "::notice::Log file '${path_to_dotnet_build_log}' not generated."
           }
-
-          [void]$pr_body.AppendLine()
-          [void]$pr_body.AppendLine('</details>')
 
           # --- workflow log ---
           [void]$pr_body.AppendLine()
