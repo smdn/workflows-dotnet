@@ -330,7 +330,6 @@ jobs:
 
           # build the options for `dotnet format`
           $dotnet_format_options = @(
-            $env:INPUT_PATH_TO_PROJECT,
             '--no-restore',
             '--verbosity', $option_verbosity_level,
             '--severity', $option_severity_level
@@ -339,6 +338,8 @@ jobs:
           if ( ! [string]::IsNullOrEmpty( $env:INPUT_EXTRA_OPTIONS_COMMON ) ) {
             $dotnet_format_options += @( $env:INPUT_EXTRA_OPTIONS_COMMON )
           }
+
+          $dotnet_format_options += @( $env:INPUT_PATH_TO_PROJECT )
 
           "dotnet format ${dotnet_format_options} 2>&1 | Tee-Object -FilePath ${path_to_log}"
           dotnet format @dotnet_format_options 2>&1 | Tee-Object -FilePath $path_to_log
