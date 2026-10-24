@@ -39,7 +39,7 @@ on:
         default: 3
 
       extra_options_common:
-        description: "The common extra options to be set on running the `dotnet restore/format` command."
+        description: "The common extra options to be set on running the `dotnet restore/build/format` command."
         required: false
         type: string
         default: ""
@@ -347,7 +347,40 @@ jobs:
           "path_to_log=${path_to_log}" >> $Env:GITHUB_OUTPUT
 
           if ( $verbose ) {
-            "::notice::Log filed was saved to '${path_to_log}'"
+            "::notice::Format log filed was saved to '${path_to_log}'"
+          }
+
+      - name: Build project ${{ matrix.project.Name }}
+        id: perform-dotnet-build
+        shell: pwsh
+        env:
+          INPUT_VERBOSE: ${{ inputs.verbose == true }}
+          INPUT_EXTRA_OPTIONS_COMMON: ${{ inputs.extra_options_common }}
+          INPUT_PATH_TO_PROJECT: ${{ matrix.project.PathToProject }}
+        run: |
+          $verbose = $env:INPUT_VERBOSE -ieq 'true'
+          $path_to_log = [System.IO.Path]::GetFullPath('dotnet-build.log')
+
+          # build the options for `dotnet build`
+          $dotnet_build_options = @(
+            '--nologo',
+            '--no-restore',
+            '-consoleLoggerParameters:NoSummary'
+          )
+
+          if ( ! [string]::IsNullOrEmpty( $env:INPUT_EXTRA_OPTIONS_COMMON ) ) {
+            $dotnet_build_options += @( $env:INPUT_EXTRA_OPTIONS_COMMON )
+          }
+
+          $dotnet_build_options += @( $env:INPUT_PATH_TO_PROJECT )
+
+          "dotnet build ${dotnet_build_options} 2>&1 | Tee-Object -FilePath ${path_to_log}"
+          dotnet build @dotnet_build_options 2>&1 | Tee-Object -FilePath $path_to_log
+
+          "path_to_log=${path_to_log}" >> $Env:GITHUB_OUTPUT
+
+          if ( $verbose ) {
+            "::notice::Build log filed was saved to '${path_to_log}'"
           }
 
       - name: Configure git identity
@@ -375,6 +408,7 @@ jobs:
           INPUT_BASE_BRANCH: ${{ github.ref_name }}
           INPUT_GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
           INPUT_PATH_TO_DOTNET_FORMAT_LOG: ${{ steps.perform-dotnet-format.outputs.path_to_log }}
+          INPUT_PATH_TO_DOTNET_BUILD_LOG: ${{ steps.perform-dotnet-build.outputs.path_to_log }}
         run: |
           $dry_run = $env:INPUT_DRY_RUN -ieq 'true'
           $verbose = $env:INPUT_VERBOSE -ieq 'true'
@@ -382,6 +416,7 @@ jobs:
           $pr_body_file = [System.IO.Path]::GetFullPath('pr-body.md');
           $path_to_project_dir = Split-Path -Parent $env:INPUT_PATH_TO_PROJECT
           $path_to_dotnet_format_log = $env:INPUT_PATH_TO_DOTNET_FORMAT_LOG
+          $path_to_dotnet_build_log = $env:INPUT_PATH_TO_DOTNET_BUILD_LOG
           $timestamp = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
           $working_branch_name = "fix-format/$env:INPUT_PROJECT_NAME-$timestamp"
 
@@ -436,6 +471,8 @@ jobs:
           $pr_body = [System.Text.StringBuilder]::new(4096)
 
           [void]$pr_body.AppendLine("Automated code formatting changes applied by ``dotnet format`` for ``$env:INPUT_PATH_TO_PROJECT``.")
+
+          # --- `dotnet format` log ---
           [void]$pr_body.AppendLine()
           [void]$pr_body.AppendLine('<details>')
           [void]$pr_body.AppendLine('<summary><code>dotnet format</code> log</summary>')
@@ -458,6 +495,32 @@ jobs:
 
           [void]$pr_body.AppendLine()
           [void]$pr_body.AppendLine('</details>')
+
+          # --- `dotnet build` log ---
+          [void]$pr_body.AppendLine()
+          [void]$pr_body.AppendLine('<details>')
+          [void]$pr_body.AppendLine('<summary><code>dotnet build</code> log</summary>')
+          [void]$pr_body.AppendLine()
+
+          if ( Test-Path -Path $path_to_dotnet_build_log -PathType Leaf ) {
+            if ( $verbose ) {
+              "::notice::Get content from the log file '${path_to_dotnet_build_log}'."
+            }
+
+            $dotnet_build_log = Get-Content $path_to_dotnet_build_log -Raw
+
+            [void]$pr_body.AppendLine('```')
+            [void]$pr_body.Append($dotnet_build_log)
+            [void]$pr_body.AppendLine('```')
+          }
+          else {
+            "::notice::Log file '${path_to_dotnet_build_log}' not generated."
+          }
+
+          [void]$pr_body.AppendLine()
+          [void]$pr_body.AppendLine('</details>')
+
+          # --- workflow log ---
           [void]$pr_body.AppendLine()
           [void]$pr_body.AppendLine("This PR was automatically created by workflow run [${env:GITHUB_RUN_ID}](${env:GITHUB_SERVER_URL}/${env:GITHUB_REPOSITORY}/actions/runs/${env:GITHUB_RUN_ID}).")
 
