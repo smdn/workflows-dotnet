@@ -452,7 +452,7 @@ jobs:
             [void]$pr_body.AppendLine('```')
           }
           else {
-            "::warning::Log file '${path_to_dotnet_format_log}' not generated."
+            "::notice::Log file '${path_to_dotnet_format_log}' not generated."
           }
 
           [void]$pr_body.AppendLine()
