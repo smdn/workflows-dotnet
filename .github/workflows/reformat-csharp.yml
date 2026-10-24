@@ -574,3 +574,12 @@ jobs:
           }
 
           "Created pull request: [${pr_title}](${pr_url})" >> $Env:GITHUB_STEP_SUMMARY
+
+      - name: Dispose working branch
+        continue-on-error: true
+        if: steps.format-changes.outputs.working_branch != '' && (failure() || cancelled())
+        shell: pwsh
+        env:
+          INPUT_WORKING_BRANCH: ${{ steps.format-changes.outputs.working_branch }}
+        run: |
+          git push origin ":${env:INPUT_WORKING_BRANCH}"
