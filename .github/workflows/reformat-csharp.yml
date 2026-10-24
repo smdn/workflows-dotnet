@@ -396,27 +396,16 @@ jobs:
           # git config user.name '${{ github.repository_owner }}'
           # git config user.email '<>'
 
-      - name: Create pull request
-        id: pullrequest
+      - name: Commit format changes to working branch
+        id: format-changes
         shell: pwsh
         env:
-          GH_TOKEN: ${{ secrets.token_pullrequest }}
           INPUT_DRY_RUN: ${{ inputs.dry_run == true }}
-          INPUT_VERBOSE: ${{ inputs.verbose == true }}
           INPUT_PROJECT_NAME: ${{ matrix.project.Name }}
           INPUT_PATH_TO_PROJECT: ${{ matrix.project.PathToProject }}
-          INPUT_BASE_BRANCH: ${{ github.ref_name }}
-          INPUT_GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
-          INPUT_PATH_TO_DOTNET_FORMAT_LOG: ${{ steps.perform-dotnet-format.outputs.path_to_log }}
-          INPUT_PATH_TO_DOTNET_BUILD_LOG: ${{ steps.perform-dotnet-build.outputs.path_to_log }}
         run: |
           $dry_run = $env:INPUT_DRY_RUN -ieq 'true'
-          $verbose = $env:INPUT_VERBOSE -ieq 'true'
-          $pr_title = "${env:INPUT_PROJECT_NAME}: Reformat C# files";
-          $pr_body_file = [System.IO.Path]::GetFullPath('pr-body.md');
           $path_to_project_dir = Split-Path -Parent $env:INPUT_PATH_TO_PROJECT
-          $path_to_dotnet_format_log = $env:INPUT_PATH_TO_DOTNET_FORMAT_LOG
-          $path_to_dotnet_build_log = $env:INPUT_PATH_TO_DOTNET_BUILD_LOG
           $timestamp = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
           $working_branch_name = "fix-format/$env:INPUT_PROJECT_NAME-$timestamp"
 
@@ -463,10 +452,35 @@ jobs:
           else {
             git commit -m "Reformat C# files in ${env:INPUT_PROJECT_NAME}"
             git push origin $working_branch_name
+
+            "working_branch=${working_branch_name}" >> $Env:GITHUB_OUTPUT
           }
 
+      - name: Create pull request
+        id: pullrequest
+        shell: pwsh
+        if: steps.format-changes.outputs.working_branch != ''
+        env:
+          GH_TOKEN: ${{ secrets.token_pullrequest }}
+          INPUT_DRY_RUN: ${{ inputs.dry_run == true }}
+          INPUT_VERBOSE: ${{ inputs.verbose == true }}
+          INPUT_PROJECT_NAME: ${{ matrix.project.Name }}
+          INPUT_BASE_BRANCH: ${{ github.ref_name }}
+          INPUT_GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
+          INPUT_WORKING_BRANCH: ${{ steps.format-changes.outputs.working_branch }}
+          INPUT_PATH_TO_DOTNET_FORMAT_LOG: ${{ steps.perform-dotnet-format.outputs.path_to_log }}
+          INPUT_PATH_TO_DOTNET_BUILD_LOG: ${{ steps.perform-dotnet-build.outputs.path_to_log }}
+        run: |
+          $dry_run = $env:INPUT_DRY_RUN -ieq 'true'
+          $verbose = $env:INPUT_VERBOSE -ieq 'true'
+          $pr_title = "${env:INPUT_PROJECT_NAME}: Reformat C# files";
+          $pr_body_file = [System.IO.Path]::GetFullPath('pr-body.md');
+          $working_branch_name = $env:INPUT_WORKING_BRANCH
+          $path_to_dotnet_format_log = $env:INPUT_PATH_TO_DOTNET_FORMAT_LOG
+          $path_to_dotnet_build_log = $env:INPUT_PATH_TO_DOTNET_BUILD_LOG
+
           #
-          # 4. Construct the pull request body
+          # 1. Construct the pull request body
           #
           $pr_body = [System.Text.StringBuilder]::new(4096)
 
@@ -530,7 +544,7 @@ jobs:
           }
 
           #
-          # 5.Create a pull request
+          # 2. Create a pull request
           # ref: https://cli.github.com/manual/gh_pr_create
           #
           $pr_create_options = @(
