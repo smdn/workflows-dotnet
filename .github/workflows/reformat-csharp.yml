@@ -484,7 +484,7 @@ jobs:
           #
           $pr_body = [System.Text.StringBuilder]::new(4096)
 
-          [void]$pr_body.AppendLine("Automated code formatting changes applied by ``dotnet format`` for ``$env:INPUT_PATH_TO_PROJECT``.")
+          [void]$pr_body.AppendLine("Automated code formatting changes applied by ``dotnet format`` for ``$env:INPUT_PROJECT_NAME``.")
 
           # --- `dotnet format` log ---
           if ( Test-Path -Path $path_to_dotnet_format_log -PathType Leaf ) {
