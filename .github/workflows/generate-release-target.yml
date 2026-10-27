@@ -96,6 +96,8 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+    env:
+      NUGET_PACKAGES: ${{ github.workspace }}/.nuget/packages
     if: startsWith(inputs.release_target_tag_name, inputs.release_target_tag_prefix)
 
     steps:
@@ -106,29 +108,17 @@ jobs:
         with:
           minimal_dotnet_sdk_version: "${{ inputs.dotnet_sdk_version }}"
 
-      - name: Set NUGET_PACKAGES
-        id: set-nuget-packages
+      - name: Configure NuGet cache
+        id: nuget-cache-configurations
         shell: pwsh
-        env:
-          INPUT_GITHUB_WORKSPACE: ${{ github.workspace }}
         run: |
-          $path_to_nuget_packages =[System.IO.Path]::Combine(
-            $env:INPUT_GITHUB_WORKSPACE,
-            '.nuget',
-            'packages'
-          )
-
-          "::debug::NUGET_PACKAGES=${path_to_nuget_packages}"
-
-          $cache_key_suffix = [System.String]::Concat(
+          $key_suffix = [System.String]::Concat(
             $([System.Globalization.ISOWeek]::GetYear([System.DateTime]::Now)),
             '-W',
             $([System.Globalization.ISOWeek]::GetWeekOfYear([System.DateTime]::Now))
           )
 
-          "NUGET_PACKAGES=${path_to_nuget_packages}" >> $Env:GITHUB_ENV
-          "path-to-nuget-packages=${path_to_nuget_packages}" >> $Env:GITHUB_OUTPUT
-          "cache-key-suffix=${cache_key_suffix}" >> $Env:GITHUB_OUTPUT
+          "key-suffix=${key_suffix}" >> $Env:GITHUB_OUTPUT
 
       - name: Setup NuGet cache
         id: setup-nuget-cache
@@ -138,8 +128,8 @@ jobs:
         env:
           SEGMENT_DOWNLOAD_TIMEOUT_MINS: 5
         with:
-          path: ${{ steps.set-nuget-packages.outputs.path-to-nuget-packages }}
-          key: generate-release-NuGetPackages-${{ steps.set-nuget-packages.outputs.cache-key-suffix }}
+          path: ${{ env.NUGET_PACKAGES }}
+          key: generate-release-NuGetPackages-${{ steps.nuget-cache-configurations.outputs.key-suffix }}
           restore-keys: generate-release-NuGetPackages
 
       - name: Configure git
