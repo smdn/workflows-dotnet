@@ -383,6 +383,15 @@ jobs:
             "::notice::Build log filed was saved to '${path_to_log}'"
           }
 
+      - name: View format change differences
+        if: inputs.verbose || failure()
+        shell: pwsh
+        run: |
+          "### Format changes" >> $Env:GITHUB_STEP_SUMMARY
+          '```diff' >> $Env:GITHUB_STEP_SUMMARY
+          git diff >> $Env:GITHUB_STEP_SUMMARY
+          '```' >> $Env:GITHUB_STEP_SUMMARY
+
       - name: Configure git identity
         # needs: steps.checkout-repository
         # Since this step must be performed within the Git directory,
