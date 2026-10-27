@@ -185,6 +185,8 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+    env:
+      NUGET_PACKAGES: ${{ github.workspace }}/.nuget/packages
     timeout-minutes: ${{ fromJson(inputs.timeout_minutes_format) }}
     runs-on: ${{ inputs.workflow_runs_on }}
     strategy:
@@ -234,31 +236,16 @@ jobs:
         uses: *checkout-repository-action
         with: *checkout-repository-action-params
 
-      - name: Set NUGET_PACKAGES
-        id: set-nuget-packages
+      - name: Configure NuGet cache
+        id: configure-nuget-cache
         shell: pwsh
-        env:
-          INPUT_VERBOSE: ${{ inputs.verbose == true }}
         run: |
-          $verbose = $env:INPUT_VERBOSE -ieq 'true'
-          $path_to_nuget_packages =[System.IO.Path]::Combine(
-            $env:GITHUB_WORKSPACE,
-            '.nuget',
-            'packages'
-          )
-
-          if ( $verbose ) {
-            "::notice::NUGET_PACKAGES=${path_to_nuget_packages}"
-          }
-
           $cache_key_suffix = [System.String]::Concat(
             $([System.Globalization.ISOWeek]::GetYear([System.DateTime]::Now)),
             '-W',
             $([System.Globalization.ISOWeek]::GetWeekOfYear([System.DateTime]::Now))
           )
 
-          "NUGET_PACKAGES=${path_to_nuget_packages}" >> $Env:GITHUB_ENV
-          "path-to-nuget-packages=${path_to_nuget_packages}" >> $Env:GITHUB_OUTPUT
           "cache-key-suffix=${cache_key_suffix}" >> $Env:GITHUB_OUTPUT
 
       - name: &setup-nuget-cache-name Setup NuGet cache
@@ -270,8 +257,8 @@ jobs:
         env: &setup-nuget-cache-envvars
           SEGMENT_DOWNLOAD_TIMEOUT_MINS: 5
         with: &setup-nuget-cache-action-params
-          path: ${{ steps.set-nuget-packages.outputs.path-to-nuget-packages }}
-          key: reformat-csharp-NuGetPackages-${{ runner.os }}-${{ steps.set-nuget-packages.outputs.cache-key-suffix }}
+          path: ${{ env.NUGET_PACKAGES }}
+          key: reformat-csharp-NuGetPackages-${{ runner.os }}-${{ steps.configure-nuget-cache.outputs.cache-key-suffix }}
           restore-keys: reformat-csharp-NuGetPackages-${{ runner.os }}
 
       - name: *setup-nuget-cache-name
