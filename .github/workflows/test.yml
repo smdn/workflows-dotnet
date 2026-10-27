@@ -129,6 +129,7 @@ jobs:
       test-projects: ${{ steps.test-projects.outputs.projects }}
       required-dotnet-sdk-version: ${{ steps.required-dotnet-sdk-version.outputs.version }}
       test-runner: ${{ steps.test-configurations.outputs.runner }}
+      nuget-cache-key-suffix: ${{ steps.nuget-cache-configurations.outputs.key-suffix }}
     env:
       RUNS_ON_OS_LIST_DEFAULT: "['ubuntu-latest', 'windows-latest', 'macos-latest']"
 
@@ -266,6 +267,19 @@ jobs:
             "runner=" >> $Env:GITHUB_OUTPUT
           }
 
+      - name: Configure NuGet cache
+        id: nuget-cache-configurations
+        background: true
+        shell: pwsh
+        run: |
+          $key_suffix = [System.String]::Concat(
+            $([System.Globalization.ISOWeek]::GetYear([System.DateTime]::Now)),
+            '-W',
+            $([System.Globalization.ISOWeek]::GetWeekOfYear([System.DateTime]::Now))
+          )
+
+          "key-suffix=${key_suffix}" >> $Env:GITHUB_OUTPUT
+
       - name: Wait for step outputs
         wait-all:
 
@@ -306,6 +320,8 @@ jobs:
     needs: [setup]
     permissions:
       contents: read
+    env:
+      NUGET_PACKAGES: ${{ github.workspace }}/.nuget/packages
     timeout-minutes: ${{ fromJson(inputs.timeout_minutes_test_job) }}
     runs-on: ${{ matrix.os }}
     strategy:
@@ -357,33 +373,6 @@ jobs:
         uses: *checkout-repository-action
         with: *checkout-repository-action-params
 
-      - name: Set NUGET_PACKAGES
-        id: set-nuget-packages
-        shell: pwsh
-        env:
-          INPUT_VERBOSE: ${{ inputs.verbose == true }}
-        run: |
-          $verbose = $env:INPUT_VERBOSE -ieq 'true'
-          $path_to_nuget_packages =[System.IO.Path]::Combine(
-            $env:GITHUB_WORKSPACE,
-            '.nuget',
-            'packages'
-          )
-
-          if ( $verbose ) {
-            "::notice::NUGET_PACKAGES=${path_to_nuget_packages}"
-          }
-
-          $cache_key_suffix = [System.String]::Concat(
-            $([System.Globalization.ISOWeek]::GetYear([System.DateTime]::Now)),
-            '-W',
-            $([System.Globalization.ISOWeek]::GetWeekOfYear([System.DateTime]::Now))
-          )
-
-          "NUGET_PACKAGES=${path_to_nuget_packages}" >> $Env:GITHUB_ENV
-          "path-to-nuget-packages=${path_to_nuget_packages}" >> $Env:GITHUB_OUTPUT
-          "cache-key-suffix=${cache_key_suffix}" >> $Env:GITHUB_OUTPUT
-
       - name: &setup-nuget-cache-name Setup NuGet cache
         id: setup-nuget-cache
         if: runner.os != 'Windows'
@@ -393,8 +382,8 @@ jobs:
         env: &setup-nuget-cache-envvars
           SEGMENT_DOWNLOAD_TIMEOUT_MINS: 5
         with: &setup-nuget-cache-action-params
-          path: ${{ steps.set-nuget-packages.outputs.path-to-nuget-packages }}
-          key: test-NuGetPackages-${{ matrix.os }}-${{ steps.set-nuget-packages.outputs.cache-key-suffix }}
+          path: ${{ env.NUGET_PACKAGES }}
+          key: test-NuGetPackages-${{ matrix.os }}-${{ needs.setup.outputs.nuget-cache-key-suffix }}
           restore-keys: test-NuGetPackages-${{ matrix.os }}
 
       - name: *setup-nuget-cache-name
