@@ -95,7 +95,7 @@ jobs:
     outputs:
       test-projects: ${{ steps.projects.outputs.projects }}
       required-dotnet-sdk-version: ${{ steps.required-dotnet-sdk-version.outputs.version }}
-
+      nuget-cache-key-suffix: ${{ steps.nuget-cache-configurations.outputs.key-suffix }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -176,6 +176,19 @@ jobs:
             "version=" >> $Env:GITHUB_OUTPUT
           }
 
+      - name: Configure NuGet cache
+        id: nuget-cache-configurations
+        background: true
+        shell: pwsh
+        run: |
+          $key_suffix = [System.String]::Concat(
+            $([System.Globalization.ISOWeek]::GetYear([System.DateTime]::Now)),
+            '-W',
+            $([System.Globalization.ISOWeek]::GetWeekOfYear([System.DateTime]::Now))
+          )
+
+          "key-suffix=${key_suffix}" >> $Env:GITHUB_OUTPUT
+
       - name: Wait for step outputs
         wait-all:
 
@@ -236,18 +249,6 @@ jobs:
         uses: *checkout-repository-action
         with: *checkout-repository-action-params
 
-      - name: Configure NuGet cache
-        id: configure-nuget-cache
-        shell: pwsh
-        run: |
-          $cache_key_suffix = [System.String]::Concat(
-            $([System.Globalization.ISOWeek]::GetYear([System.DateTime]::Now)),
-            '-W',
-            $([System.Globalization.ISOWeek]::GetWeekOfYear([System.DateTime]::Now))
-          )
-
-          "cache-key-suffix=${cache_key_suffix}" >> $Env:GITHUB_OUTPUT
-
       - name: &setup-nuget-cache-name Setup NuGet cache
         id: setup-nuget-cache
         if: runner.os != 'Windows'
@@ -258,7 +259,7 @@ jobs:
           SEGMENT_DOWNLOAD_TIMEOUT_MINS: 5
         with: &setup-nuget-cache-action-params
           path: ${{ env.NUGET_PACKAGES }}
-          key: reformat-csharp-NuGetPackages-${{ runner.os }}-${{ steps.configure-nuget-cache.outputs.cache-key-suffix }}
+          key: reformat-csharp-NuGetPackages-${{ runner.os }}-${{ needs.setup.outputs.nuget-cache-key-suffix }}
           restore-keys: reformat-csharp-NuGetPackages-${{ runner.os }}
 
       - name: *setup-nuget-cache-name
