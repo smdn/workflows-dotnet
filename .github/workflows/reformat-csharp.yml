@@ -338,48 +338,6 @@ jobs:
             "::notice::Format log filed was saved to '${path_to_log}'"
           }
 
-      - name: Build project ${{ matrix.project.Name }}
-        id: perform-dotnet-build
-        shell: pwsh
-        env:
-          INPUT_VERBOSE: ${{ inputs.verbose == true }}
-          INPUT_EXTRA_OPTIONS_COMMON: ${{ inputs.extra_options_common }}
-          INPUT_PATH_TO_PROJECT: ${{ matrix.project.PathToProject }}
-        run: |
-          $verbose = $env:INPUT_VERBOSE -ieq 'true'
-          $path_to_log = [System.IO.Path]::GetFullPath('dotnet-build.log')
-
-          # build the options for `dotnet build`
-          $dotnet_build_options = @(
-            '--nologo',
-            '--no-restore',
-            '-consoleLoggerParameters:NoSummary'
-          )
-
-          if ( ! [string]::IsNullOrEmpty( $env:INPUT_EXTRA_OPTIONS_COMMON ) ) {
-            $dotnet_build_options += @( $env:INPUT_EXTRA_OPTIONS_COMMON )
-          }
-
-          $dotnet_build_options += @( $env:INPUT_PATH_TO_PROJECT )
-
-          "dotnet build ${dotnet_build_options} 2>&1 | Tee-Object -FilePath ${path_to_log}"
-          dotnet build @dotnet_build_options 2>&1 | Tee-Object -FilePath $path_to_log
-
-          "path_to_log=${path_to_log}" >> $Env:GITHUB_OUTPUT
-
-          if ( $verbose ) {
-            "::notice::Build log filed was saved to '${path_to_log}'"
-          }
-
-      - name: View format change differences
-        if: inputs.verbose || failure()
-        shell: pwsh
-        run: |
-          "### Format changes" >> $Env:GITHUB_STEP_SUMMARY
-          '```diff' >> $Env:GITHUB_STEP_SUMMARY
-          git diff >> $Env:GITHUB_STEP_SUMMARY
-          '```' >> $Env:GITHUB_STEP_SUMMARY
-
       - name: Configure git identity
         # needs: steps.checkout-repository
         # Since this step must be performed within the Git directory,
@@ -452,6 +410,49 @@ jobs:
 
             "working_branch=${working_branch_name}" >> $Env:GITHUB_OUTPUT
           }
+
+      - name: Verify build validity of the format change for ${{ matrix.project.Name }}
+        id: perform-dotnet-build
+        if: steps.format-changes.outputs.working_branch != ''
+        shell: pwsh
+        env:
+          INPUT_VERBOSE: ${{ inputs.verbose == true }}
+          INPUT_EXTRA_OPTIONS_COMMON: ${{ inputs.extra_options_common }}
+          INPUT_PATH_TO_PROJECT: ${{ matrix.project.PathToProject }}
+        run: |
+          $verbose = $env:INPUT_VERBOSE -ieq 'true'
+          $path_to_log = [System.IO.Path]::GetFullPath('dotnet-build.log')
+
+          # build the options for `dotnet build`
+          $dotnet_build_options = @(
+            '--nologo',
+            '--no-restore',
+            '-consoleLoggerParameters:NoSummary'
+          )
+
+          if ( ! [string]::IsNullOrEmpty( $env:INPUT_EXTRA_OPTIONS_COMMON ) ) {
+            $dotnet_build_options += @( $env:INPUT_EXTRA_OPTIONS_COMMON )
+          }
+
+          $dotnet_build_options += @( $env:INPUT_PATH_TO_PROJECT )
+
+          "dotnet build ${dotnet_build_options} 2>&1 | Tee-Object -FilePath ${path_to_log}"
+          dotnet build @dotnet_build_options 2>&1 | Tee-Object -FilePath $path_to_log
+
+          "path_to_log=${path_to_log}" >> $Env:GITHUB_OUTPUT
+
+          if ( $verbose ) {
+            "::notice::Build log filed was saved to '${path_to_log}'"
+          }
+
+      - name: View format change differences
+        if: steps.format-changes.outputs.working_branch != '' && (inputs.verbose || failure())
+        shell: pwsh
+        run: |
+          "### Format changes" >> $Env:GITHUB_STEP_SUMMARY
+          '```diff' >> $Env:GITHUB_STEP_SUMMARY
+          git diff HEAD~1 >> $Env:GITHUB_STEP_SUMMARY
+          '```' >> $Env:GITHUB_STEP_SUMMARY
 
       - name: Create pull request
         id: pullrequest
