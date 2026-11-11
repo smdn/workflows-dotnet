@@ -137,6 +137,8 @@ jobs:
           $package_id = $env:INPUT_PACKAGE_ID
           $package_version = $env:INPUT_PACKAGE_VERSION
 
+          $time_start_at = Get-Date
+
           while ($true) {
             try {
               $resp = Get-NuGetPackageManifestStatus `
@@ -149,7 +151,9 @@ jobs:
                 break
               }
               else {
-                "::warning::⚠️ $($resp.StatusCode) $($resp.StatusDescription) ${package_id}/${package_version}"
+                $elapsed = (Get-Date) - $time_start_at
+
+                "::warning::⚠️ $($resp.StatusCode) $($resp.StatusDescription) ${package_id}/${package_version} (elapsed $($elapsed.ToString('hh\:mm')))"
               }
             }
             catch {
