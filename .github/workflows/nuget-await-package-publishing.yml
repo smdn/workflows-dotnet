@@ -24,7 +24,7 @@ on:
         description: "The timeout minutes for waiting for package publishing."
         required: false
         type: number
-        default: 15
+        default: 30
 
       update_interval_seconds:
         description: "The interval for retrieving package status, in seconds."
