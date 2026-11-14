@@ -75,7 +75,7 @@ on:
         required: true
 
       token_pullrequest:
-        description: "The token which is used to open a pull request for the new release."
+        description: "The token which is used to open a pull request for the format changes."
         required: true
 
 env:
