@@ -95,6 +95,43 @@ jobs:
       contents: write
 
     steps:
+      - name: Generate release notes content for ${{ inputs.release_tag }}
+        id: generated-release-notes
+        env:
+          GH_TOKEN: ${{ secrets.token_new_release }}
+          INPUT_GITHUB_REPOSITORY: ${{ github.repository }}
+          INPUT_RELEASE_TAG: ${{ inputs.release_tag }}
+          INPUT_PACKAGE_BRANCH: ${{ inputs.package_branch }}
+          INPUT_PACKAGE_PREVVER_TAG: ${{ inputs.package_prevver_tag }}
+        shell: pwsh
+        run: |
+          # Get generated release notes content for a release
+          # ref: https://docs.github.com/ja/rest/releases/releases#generate-release-notes-content-for-a-release
+          $release_api_generate_notes_options = @(
+            '--method', 'POST',
+            '-H', 'Accept: application/vnd.github+json',
+            "/repos/${env:INPUT_GITHUB_REPOSITORY}/releases/generate-notes",
+            '-f', "tag_name=${env:INPUT_RELEASE_TAG}",
+            '-f', "target_commitish=${env:INPUT_PACKAGE_BRANCH}"
+          )
+
+          if ( $env:INPUT_PACKAGE_PREVVER_TAG ) {
+            $release_api_generate_notes_options += @(
+              '-f', "previous_tag_name=${env:INPUT_PACKAGE_PREVVER_TAG}"
+            )
+          }
+
+          "gh api ${release_api_generate_notes_options}"
+
+          $generated_release_notes = $(gh api $release_api_generate_notes_options) `
+            | ConvertFrom-Json
+          $generated_release_notes_content_output_path = [System.IO.Path]::GetFullPath('generated-releasenotes.md')
+
+          Out-File -FilePath $generated_release_notes_content_output_path -Encoding utf8 -InputObject $generated_release_notes.body
+
+          # set outputs
+          "path=${generated_release_notes_content_output_path}" >> $Env:GITHUB_OUTPUT
+
       - name: Create release note files for ${{ inputs.package_id }}-${{ inputs.package_version }}
         id: release-notes-file
         env:
@@ -108,8 +145,8 @@ jobs:
           INPUT_GITHUB_REPOSITORY: ${{ github.repository }}
           INPUT_RELEASE_TAG: ${{ inputs.release_tag }}
           INPUT_PACKAGE_BRANCH: ${{ inputs.package_branch }}
-          INPUT_PACKAGE_PREVVER_TAG: ${{ inputs.package_prevver_tag }}
           INPUT_GITHUB_PACKAGES_OWNER: ${{ github.repository_owner }} # TODO: make configurable, support organization
+          INPUT_GENERATED_RELEASE_NOTES_PATH: ${{ steps.generated-release-notes.outputs.path }}
         shell: pwsh
         run: |
           $dry_run = $env:INPUT_DRY_RUN -ieq 'true'
@@ -273,31 +310,9 @@ jobs:
             }
           }
 
-          # append release notes content for a release
-          # ref: https://docs.github.com/ja/rest/releases/releases#generate-release-notes-content-for-a-release
-          $release_api_generate_notes_options = @(
-            '--method', 'POST',
-            '-H', 'Accept: application/vnd.github+json',
-            "/repos/${env:INPUT_GITHUB_REPOSITORY}/releases/generate-notes",
-            '-f', "tag_name=${env:INPUT_RELEASE_TAG}",
-            '-f', "target_commitish=${env:INPUT_PACKAGE_BRANCH}"
-          )
-
-          $package_prevver_tag = $env:INPUT_PACKAGE_PREVVER_TAG
-
-          if ( $package_prevver_tag ) {
-            $release_api_generate_notes_options += @(
-              '-f', "previous_tag_name=${env:INPUT_PACKAGE_PREVVER_TAG}"
-            )
-          }
-
-          "gh api ${release_api_generate_notes_options}"
-
-          $generated_release_notes = $(gh api $release_api_generate_notes_options) `
-            | ConvertFrom-Json
-
+          # read and append release notes content for a release
           [void]$release_notes_body.AppendLine("## Notes")
-          [void]$release_notes_body.AppendLine($generated_release_notes.body)
+          [void]$release_notes_body.AppendLine($(Get-Content -Path $env:INPUT_GENERATED_RELEASE_NOTES_PATH) -join "`n")
 
           # write release notes file
           if (-not $dry_run) {
