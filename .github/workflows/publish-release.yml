@@ -92,7 +92,7 @@ jobs:
     name: Publish release for '${{ inputs.package_id }}-${{ inputs.package_version }}'
     runs-on: ${{ inputs.workflow_runs_on }}
     permissions:
-      contents: write
+      contents: write # gh release create
 
     steps:
       - name: Generate release notes content for ${{ inputs.release_tag }}

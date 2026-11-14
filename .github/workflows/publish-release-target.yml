@@ -41,7 +41,15 @@ on:
 
     secrets:
       token_repo:
-        description: "The token which is used to checkout code, view pull request of release target, download artifact from the precedent workflow, and create a new release."
+        description: "The token which is used to view pull request of release target, download artifact from the precedent workflow. (Requires read-only permissions)"
+        required: true
+
+      token_new_release:
+        description: "The token which is used to checkout code, push a release tag and create a new release. (Requires read and write permissions)"
+        required: true
+
+      token_gist:
+        description: "The token which is used to read release notes from gist. (Requires read-only permissions)"
         required: true
 
       token_push_nuget_org:
@@ -63,9 +71,10 @@ jobs:
     name: Publish release target (#${{ inputs.pr_number_request_for_release }})
     runs-on: ${{ inputs.workflow_runs_on }}
     permissions:
-      contents: write
-      packages: write
-      pull-requests: read
+      actions: read # gh run download
+      contents: read # gh pr view
+      packages: write # dotnet nuget push (GitHub Packages)
+      pull-requests: read # gh pr view
     outputs:
       release_tag:                  ${{ steps.release-info.outputs.release_tag }}
       release_note_url:             ${{ steps.release-info.outputs.release_note_url }}
@@ -97,7 +106,7 @@ jobs:
         # note: checkout repository firstly due to working directory will be cleaned up on checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          token: ${{ secrets.token_repo }}
+          token: ${{ secrets.token_new_release }}
           persist-credentials: true
 
       - name: Check pull request labels
@@ -477,7 +486,7 @@ jobs:
     name: Publish release for '${{ needs.publish-release-target.outputs.release_tag }}'
     uses: $/.github/workflows/publish-release.yml
     permissions:
-      contents: write
+      contents: write # gh release create
     needs: publish-release-target
     with:
       workflow_runs_on:             ${{ inputs.workflow_runs_on }}
@@ -493,5 +502,5 @@ jobs:
       package_available_github_packages:  ${{ needs.publish-release-target.outputs.package_available_github_packages == 'true' || needs.publish-release-target.outputs.package_available_github_packages == 'True' }}
       dry_run:                      ${{ inputs.dry_run == true }}
     secrets:
-      token_gist:                   ${{ secrets.token_repo }}
-      token_new_release:            ${{ secrets.token_repo }}
+      token_gist:                   ${{ secrets.token_gist }}
+      token_new_release:            ${{ secrets.token_new_release }}

@@ -72,15 +72,15 @@ on:
 
     secrets:
       token_repo:
-        description: "The token which is used to checkout code."
+        description: "The token which is used to checkout code and push release working branch. (Requires read and write permissions)"
         required: true
 
       token_pullrequest:
-        description: "The token which is used to open a pull request for the new release."
+        description: "The token which is used to open a pull request for the new release. (Requires read and write permissions)"
         required: true
 
       token_gist:
-        description: "The token which is used to create release notes onto gist."
+        description: "The token which is used to create release notes onto gist. (Requires read and write permissions)"
         required: true
 
 env:
