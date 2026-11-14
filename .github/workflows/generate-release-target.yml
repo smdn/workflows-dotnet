@@ -410,7 +410,6 @@ jobs:
           }
 
       - name: Upload ${{ steps.pack.outputs.artifact_name_nupkg }}
-        background: true # run and forget
         if: ${{ steps.package-info.outputs.package_can_release == 'True' }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -418,10 +417,47 @@ jobs:
           path: ${{ steps.pack.outputs.path_nupkg }}
           retention-days: 1
           if-no-files-found: error
+          # Disable re-compression because .nupkg is already a compressed ZIP archive;
+          # further compression is virtually ineffective and can trigger artifact corruption
+          # (e.g., stream truncation) during upload.
+          # See: https://github.com/actions/upload-artifact/issues/728
+          compression-level: 0
           # The `gh run download` command fails when downloading artifacts that are
           # not archived, so for now, it is necessary to upload archived artifact.
           # See: https://github.com/cli/cli/issues/13012
           # archive: false
+
+      - name: Download uploaded ${{ steps.pack.outputs.artifact_name_nupkg }}
+        if: ${{ steps.package-info.outputs.package_can_release == 'True' }}
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ${{ steps.pack.outputs.artifact_name_nupkg }}
+          path: ${{ runner.temp }}/verify-artifact
+
+      - name: Verify digest of uploaded ${{ steps.pack.outputs.artifact_name_nupkg }}
+        if: ${{ steps.package-info.outputs.package_can_release == 'True' }}
+        shell: pwsh
+        env:
+          INPUT_EXPECTED_DIGEST_NUPKG: ${{ steps.pack.outputs.artifact_digest_nupkg }}
+          INPUT_ARTIFACT_PATH_NUPKG: ${{ runner.temp }}/verify-artifact/${{ steps.pack.outputs.artifact_name_nupkg }}
+        run: |
+          if (-not (Test-Path -LiteralPath $env:INPUT_ARTIFACT_PATH_NUPKG -PathType Leaf)) {
+            "::error::Expected .nupkg not found in downloaded artifact: '$env:INPUT_ARTIFACT_PATH_NUPKG'"
+            exit 1
+          }
+
+          $actual_digest_nupkg = "sha256:" + (Get-FileHash -LiteralPath $env:INPUT_ARTIFACT_PATH_NUPKG -Algorithm SHA256).Hash.ToLower()
+
+          "Digest expected: $env:INPUT_EXPECTED_DIGEST_NUPKG"
+          "Digest actual:   $actual_digest_nupkg"
+
+          if ($actual_digest_nupkg -ne $env:INPUT_EXPECTED_DIGEST_NUPKG) {
+            "::error::A hash value mismatch was detected while performing an artifact integrity check. The uploaded artifact appears to be corrupted."
+            exit 1
+          }
+
+          # Clean up temporary downloaded file
+          Remove-Item -LiteralPath $env:INPUT_ARTIFACT_PATH_NUPKG -Force
 
       - name: Generate .nuspec diff
         id: nuspec-diff
