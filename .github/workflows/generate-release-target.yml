@@ -481,9 +481,9 @@ jobs:
 
           '## :package: .nuspec diff'   >> $Env:GITHUB_STEP_SUMMARY
           ''                            >> $Env:GITHUB_STEP_SUMMARY
-          '```diff'                     >> $Env:GITHUB_STEP_SUMMARY
+          '```````diff'                 >> $Env:GITHUB_STEP_SUMMARY
           cat $path_nuspec_diff         >> $Env:GITHUB_STEP_SUMMARY
-          '```'                         >> $Env:GITHUB_STEP_SUMMARY
+          '```````'                     >> $Env:GITHUB_STEP_SUMMARY
 
           # set outputs
           "path_nuspec_diff=${path_nuspec_diff}" >> $Env:GITHUB_OUTPUT
@@ -800,9 +800,9 @@ jobs:
             $pr_body_appendix = New-Object System.Text.StringBuilder -ArgumentList 2048
 
             [void]$pr_body_appendix.AppendLine("# $($pr_body_content.Title)")
-            [void]$pr_body_appendix.AppendLine('```' + [System.IO.Path]::GetExtension($($pr_body_content.FileName)).TrimStart('.'))
+            [void]$pr_body_appendix.AppendLine('```````' + [System.IO.Path]::GetExtension($($pr_body_content.FileName)).TrimStart('.'))
             [void]$pr_body_appendix.AppendLine($(Get-Content -Path $pr_body_content.FileName) -join "`n")
-            [void]$pr_body_appendix.AppendLine('```')
+            [void]$pr_body_appendix.AppendLine('```````')
 
             "::debug::pr_body.length: $($pr_body.Length) pr_body_appendix.length: $($pr_body_appendix.Length)"
 

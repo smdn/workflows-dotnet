@@ -222,13 +222,13 @@ jobs:
                     '<summary>API changes in this release:</summary>'
                     '<div>'
                     ''
-                    '```diff'
+                    '```````diff'
                   )
                 ))
                 Footer = $([String]::Join(
                   "`n",
                   @(
-                    '```'
+                    '```````'
                     ''
                     '</div>'
                     '</details>'
@@ -245,13 +245,13 @@ jobs:
                     '<summary>Full changes in this release:</summary>'
                     '<div>'
                     ''
-                    '```diff'
+                    '```````diff'
                   )
                 ))
                 Footer = $([String]::Join(
                   "`n",
                   @(
-                    '```'
+                    '```````'
                     ''
                     '</div>'
                     '</details>'
