@@ -450,9 +450,9 @@ jobs:
         shell: pwsh
         run: |
           "### Format changes" >> $Env:GITHUB_STEP_SUMMARY
-          '```diff' >> $Env:GITHUB_STEP_SUMMARY
+          '```````diff' >> $Env:GITHUB_STEP_SUMMARY
           git diff HEAD~1 >> $Env:GITHUB_STEP_SUMMARY
-          '```' >> $Env:GITHUB_STEP_SUMMARY
+          '```````' >> $Env:GITHUB_STEP_SUMMARY
 
       - name: Create pull request
         id: pullrequest
