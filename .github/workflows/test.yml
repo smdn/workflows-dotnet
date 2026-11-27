@@ -93,6 +93,12 @@ on:
         type: string
         default: ""
 
+      error_if_test_project_not_exist:
+        description: "If true, reports an error and discontinues when the test project explicitly specified by `project` does not exist."
+        required: false
+        type: boolean
+        default: true
+
       verbose:
         description: "If true, enables verbose output."
         required: false
@@ -171,8 +177,10 @@ jobs:
           INPUT_VERBOSE: ${{ inputs.verbose == true }}
           INPUT_PATH_PREFIX_TESTS: ${{ inputs.path_prefix_tests }}
           INPUT_PROJECT: ${{ inputs.project }}
+          INPUT_ERROR_TEST_PROJECT_NOT_EXIST: ${{ inputs.error_if_test_project_not_exist }}
         run: |
           $verbose = $env:INPUT_VERBOSE -ieq 'true'
+          $error_if_test_project_not_exist = $env:INPUT_ERROR_TEST_PROJECT_NOT_EXIST -ieq 'true'
           $directory_tests = [System.IO.Path]::Join($env:GITHUB_WORKSPACE, $env:INPUT_PATH_PREFIX_TESTS)
 
           # find all project from directories which contains the file named '*.Tests.csproj'
@@ -188,7 +196,17 @@ jobs:
               }
 
           if ( ! [string]::IsNullOrEmpty( $env:INPUT_PROJECT ) ) {
-            $projects = $projects | where Name -eq $env:INPUT_PROJECT
+            $projects = @( $projects | where Name -eq $env:INPUT_PROJECT )
+
+            if ($objects.Count -eq 0) {
+              if ($error_if_test_project_not_exist) {
+                "::error::The test project for '${env:INPUT_PROJECT}' does not exist."
+                exit 1
+              }
+              else {
+                "::warning::The test project for '${env:INPUT_PROJECT}' does not exist."
+              }
+            }
           }
 
           '### Test project'    >> $Env:GITHUB_STEP_SUMMARY
