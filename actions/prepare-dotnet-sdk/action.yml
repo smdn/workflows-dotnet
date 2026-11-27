@@ -5,26 +5,32 @@ name: Prepare .NET SDK
 description: >
   A composite action that prepares minimum required version of .NET SDK.
   Before installation, it checks whether the minimum required version is already installed or not.
-  The installation is performed only when the specified version is not installed.
-  Even if the required minimum version is already installed, this action runs
-  `actions/setup-dotnet` to enable the C# compiler problem matcher.
+  The installation is performed only when the specified or required version is not installed.
+  Even if the specified or required minimum version is already installed, this action attempts to
+  output `::add-matcher` to enable the C# compiler problem matcher.
 
 inputs:
   minimal_dotnet_sdk_version:
     description: "The minimum required version of the .NET SDK which must be installed."
-    required: true
-    default: "10.0.100"
+    required: false
+    default: ""
+
+  path_global_json:
+    description: "The path to the 'global.json' file that describes the .NET SDK requirements."
+    required: false
+    default: ""
 
 outputs:
   installed_dotnet_sdk_version:
     description: "The .NET SDK version that has either been newly installed or has already been deployed."
-    value: ${{ steps.install-dotnet-sdk.outputs.dotnet-version || inputs.minimal_dotnet_sdk_version }}
+    value: ${{ steps.install-dotnet-sdk-global-json.outputs.dotnet-version || steps.install-dotnet-sdk.outputs.dotnet-version || inputs.minimal_dotnet_sdk_version }}
 
 runs:
   using: "composite"
   steps:
     - name: Check .NET SDK ${{ inputs.minimal_dotnet_sdk_version }} is installed
       id: check-dotnet-sdk-version
+      if: ${{ inputs.minimal_dotnet_sdk_version != '' }}
       shell: pwsh
       env:
         INPUT_MINIMAL_DOTNET_SDK_VERSION: ${{ inputs.minimal_dotnet_sdk_version }}
@@ -49,14 +55,21 @@ runs:
 
     - name: Install .NET SDK ${{ steps.check-dotnet-sdk-version.outputs.required-version }}
       id: install-dotnet-sdk
-      if: ${{ steps.check-dotnet-sdk-version.outputs.required-version != '' }} # if specified version is not installed
-      uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+      if: ${{ steps.check-dotnet-sdk-version.outputs.required-version != '' }} # if minimum required version is not installed
+      uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
       with:
         dotnet-version: "${{ steps.check-dotnet-sdk-version.outputs.required-version }}"
 
+    - name: Install .NET SDK of version specified in global.json
+      id: install-dotnet-sdk-global-json
+      if: ${{ inputs.path_global_json != '' }} # if specified version is not installed
+      uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+      with:
+        global-json-file: ${{ inputs.path_global_json }}
+
     - name: Register C# compiler problem matcher
       id: register-problem-matcher
-      if: ${{ steps.check-dotnet-sdk-version.outputs.required-version == '' }} # if specified version is available
+      if: ${{ steps.check-dotnet-sdk-version.outputs.required-version == '' || inputs.path_global_json == '' }} # if specified version is already available and no installation attempted
       shell: pwsh
       run: |
         # This step reuses the csc.json file downloaded as part of the
