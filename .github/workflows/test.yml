@@ -286,6 +286,9 @@ jobs:
   run-tests:
     name: Test ${{ matrix.project.Name }} on ${{ matrix.os }}
     needs: [setup]
+    if: >-
+      needs.setup.outputs.runs-ons != '' && needs.setup.outputs.runs-ons != '[]' &&
+      needs.setup.outputs.test-projects != '' && needs.setup.outputs.test-projects != '[]'
     permissions:
       contents: read
     env:
