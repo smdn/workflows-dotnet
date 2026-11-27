@@ -27,11 +27,11 @@ on:
         type: string
         default: "ubuntu-latest"
 
-      dotnet_sdk_version:
-        description: "The minimum .NET SDK version which is used to publish the release target."
+      path_global_json:
+        description: "The path to the 'global.json' file that configures the .NET SDK requirements."
         required: false
         type: string
-        default: "10.0.100"
+        default: "global.json"
 
       dry_run:
         description: "If true, performs a trial run."
@@ -64,6 +64,7 @@ env:
   # cSpell:disable
   DOTNET_CLI_TELEMETRY_OPTOUT: true
   DOTNET_NOLOGO: true
+  DOTNET_CHECK_LATEST: false # use installed version if available; https://github.com/actions/setup-dotnet#using-the-check-latest-input
   # cSpell:enable
 
 jobs:
@@ -88,13 +89,6 @@ jobs:
       package_available_github_packages:  ${{ steps.push-github-packages.outputs.pushed }}
 
     steps:
-      - name: Prepare .NET SDK ${{ inputs.dotnet_sdk_version }}
-        id: prepare-dotnet-sdk
-        background: true
-        uses: smdn/workflows-dotnet/actions/prepare-dotnet-sdk@ca77c33b60b27d8734f7e7cc02f97a9b274c6779 # actions/prepare-dotnet-sdk/v1.3.0
-        with:
-          minimal_dotnet_sdk_version: "${{ inputs.dotnet_sdk_version }}"
-
       - name: Configure git
         run: |
           git config --global core.autocrlf input
@@ -135,6 +129,13 @@ jobs:
             "::error::The required label '${env:INPUT_PR_LABEL_REQUEST_FOR_RELEASE}' is not set to the pull request."
             exit 1
           }
+
+      - name: Prepare .NET SDK
+        id: prepare-dotnet-sdk
+        background: true
+        uses: $/actions/prepare-dotnet-sdk
+        with:
+          path_global_json: ${{ inputs.path_global_json }}
 
       - name: Determine release target information
         id: release-info
