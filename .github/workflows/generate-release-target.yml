@@ -427,6 +427,14 @@ jobs:
           # See: https://github.com/cli/cli/issues/13012
           # archive: false
 
+      - name: Wait for indexing ${{ steps.pack.outputs.artifact_name_nupkg }}
+        # Even if the upload is complete, an "Artifact not found" error may occur when
+        # attempting to download immediately afterward. To account for the possibility
+        # that the uploaded artifact is not yet available for download or has not been
+        # indexed, insert a short delay here.
+        shell: bash
+        run: sleep 2
+
       - name: Download uploaded ${{ steps.pack.outputs.artifact_name_nupkg }}
         if: ${{ steps.package-info.outputs.package_can_release == 'True' }}
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
