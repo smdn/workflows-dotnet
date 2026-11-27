@@ -82,6 +82,7 @@ env:
   # cSpell:disable
   DOTNET_CLI_TELEMETRY_OPTOUT: true
   DOTNET_NOLOGO: true
+  DOTNET_CHECK_LATEST: false # use installed version if available; https://github.com/actions/setup-dotnet#using-the-check-latest-input
   MSBUILDTERMINALLOGGER: off
   # cSpell:enable
 
@@ -94,7 +95,6 @@ jobs:
     timeout-minutes: 2
     outputs:
       test-projects: ${{ steps.projects.outputs.projects }}
-      required-dotnet-sdk-version: ${{ steps.required-dotnet-sdk-version.outputs.version }}
       nuget-cache-key-suffix: ${{ steps.nuget-cache-configurations.outputs.key-suffix }}
     steps:
       - name: Checkout repository
@@ -150,32 +150,6 @@ jobs:
 
           "projects=${output_json}" >> $Env:GITHUB_OUTPUT
 
-      - name: Determine required .NET SDK version
-        id: required-dotnet-sdk-version
-        background: true
-        shell: pwsh
-        env:
-          INPUT_PATH_GLOBAL_JSON: ${{ inputs.path_global_json }}
-        run: |
-          $path_to_global_json = $null
-
-          if (![string]::IsNullOrEmpty($env:INPUT_PATH_GLOBAL_JSON)) {
-            $path_to_global_json = [System.IO.Path]::Join($env:GITHUB_WORKSPACE, $env:INPUT_PATH_GLOBAL_JSON)
-          }
-
-          # get required SDK version specified in 'global.json'
-          if (
-            ![string]::IsNullOrEmpty($path_to_global_json) -and
-            (Test-Path -LiteralPath $path_to_global_json -PathType Leaf)
-          ) {
-            $sdk_version = jq -c -r ".sdk.version" $path_to_global_json
-
-            "version=${sdk_version}" >> $Env:GITHUB_OUTPUT
-          }
-          else {
-            "version=" >> $Env:GITHUB_OUTPUT
-          }
-
       - name: Configure NuGet cache
         id: nuget-cache-configurations
         background: true
@@ -209,22 +183,6 @@ jobs:
           - ${{ fromJson(needs.setup.outputs.test-projects) }}
 
     steps:
-      - name: &prepare-dotnet-sdk-name Prepare .NET SDK ${{ needs.setup.outputs.required-dotnet-sdk-version }}
-        id: prepare-dotnet-sdk
-        if: runner.os != 'Windows'
-        background: true
-        uses: &prepare-dotnet-sdk-action smdn/workflows-dotnet/actions/prepare-dotnet-sdk@ca77c33b60b27d8734f7e7cc02f97a9b274c6779 # actions/prepare-dotnet-sdk/v1.3.0
-        with: &prepare-dotnet-sdk-action-params
-          minimal_dotnet_sdk_version: "${{ needs.setup.outputs.required-dotnet-sdk-version }}"
-
-      - name: *prepare-dotnet-sdk-name
-        id: prepare-dotnet-sdk-non-background
-        # Workaround: Run synchronously on Windows to avoid OS-specific file locking conflicts (sharing violations).
-        # Since 'background' does not accept expressions (${{ ... }}), YAML anchors are used to reuse configurations across split steps.
-        if: runner.os == 'Windows'
-        uses: *prepare-dotnet-sdk-action
-        with: *prepare-dotnet-sdk-action-params
-
       - name: Configure git
         run: |
           git config --global core.autocrlf input
@@ -272,7 +230,12 @@ jobs:
         with: *setup-nuget-cache-action-params
 
       - name: Wait for prerequisite steps
-        wait: [prepare-dotnet-sdk, checkout-repository, setup-nuget-cache]
+        wait: [checkout-repository, setup-nuget-cache]
+
+      - name: Prepare .NET SDK
+        uses: $/actions/prepare-dotnet-sdk
+        with:
+          path_global_json: ${{ inputs.path_global_json }}
 
       - name: Restore dependencies of ${{ matrix.project.Name }}
         shell: pwsh
